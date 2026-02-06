@@ -1,6 +1,6 @@
 module DStyle
 
-export RuleViolation, check_kernel_function_barriers, test_all
+export RuleViolation, check_kernel_function_barriers, readme_badge, test_all
 
 struct RuleViolation
     rule::Symbol
@@ -117,6 +117,38 @@ function test_all(;
     return violations
 end
 
+"""
+    readme_badge(; paths=nothing, max_lines_from_signature=1, label="DStyle", style="flat-square", link=nothing)
+
+Builds a Shields.io badge snippet for README files using current DStyle check
+results. The badge message is `pass` when no violations exist; otherwise it is
+`fail(<count>)`.
+"""
+function readme_badge(;
+    paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
+    max_lines_from_signature::Int = 1,
+    label::AbstractString = "DStyle",
+    style::AbstractString = "flat-square",
+    link::Union{Nothing, AbstractString} = nothing,
+)
+    violations = test_all(
+        paths = paths,
+        max_lines_from_signature = max_lines_from_signature,
+        throw = false,
+    )
+    message = isempty(violations) ? "pass" : "fail($(length(violations)))"
+    color = isempty(violations) ? "brightgreen" : "red"
+
+    badge_url =
+        "https://img.shields.io/badge/$(_shield_escape(label))-$(_shield_escape(message))-$color?style=$(_url_escape(style))"
+    image = "![DStyle status]($badge_url)"
+
+    if isnothing(link)
+        return image
+    end
+    return "[$image]($(String(link)))"
+end
+
 function _default_source_paths()
     source_dir = joinpath(pwd(), "src")
     if !isdir(source_dir)
@@ -131,6 +163,20 @@ function _default_source_paths()
         end
     end
     return sort!(files)
+end
+
+function _shield_escape(value::AbstractString)
+    # Shields path segments use `-` as a separator; literal dashes are escaped as `--`.
+    escaped = replace(String(value), "-" => "--", "_" => "__")
+    return _url_escape(escaped)
+end
+
+function _url_escape(value::AbstractString)
+    encoded = String(value)
+    encoded = replace(encoded, "%" => "%25")
+    encoded = replace(encoded, " " => "%20")
+    encoded = replace(encoded, "(" => "%28", ")" => "%29")
+    return encoded
 end
 
 function _strip_comment(line::AbstractString)
