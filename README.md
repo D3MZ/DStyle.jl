@@ -19,20 +19,21 @@ Run checks (Aqua.jl-like):
 ```julia
 using Test
 using DStyle
-using MyPkg
+using YourPackageName
 
 @testset "DStyle" begin
-    DStyle.test_all(MyPkg)
+    DStyle.test_all(YourPackageName)
 end
 ```
+(`YourPackageName` is your package module name.)
 
 Generate a local (runtime) README badge:
 ```julia
 using DStyle
 
 badge = DStyle.readme_badge(
-    paths = ["src/MyPkg.jl"],
-    link = "https://github.com/me/MyPkg/actions",
+    paths = ["src/YourPackageName.jl"],
+    link = "https://github.com/you/YourPackageName/actions",
 )
 println(badge)
 ```
@@ -69,7 +70,7 @@ Pass
 ```julia
 using DStyle
 
-badge = DStyle.readme_badge(paths = ["src/MyPkg.jl"], link = "https://github.com/me/MyPkg/actions")
+badge = DStyle.readme_badge(paths = ["src/YourPackageName.jl"], link = "https://github.com/you/YourPackageName/actions")
 println(badge)
 # [![DStyle status](https://img.shields.io/badge/DStyle-pass-brightgreen?style=flat-square)](...)
 ```
