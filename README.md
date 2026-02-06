@@ -38,12 +38,12 @@ badge = DStyle.readme_badge(
 println(badge)
 ```
 
-Setup once (recommended):
+Setup GitHub Actions once (recommended):
 ```julia
 using DStyle
 
 # run from your repo root
-setup = DStyle.setup!()
+setup = DStyle.setupgithub!()
 println(setup.badge)
 ```
 
@@ -88,7 +88,7 @@ Dynamic CI badge (recommended):
 ```julia
 using DStyle
 
-setup = DStyle.setup!()
+setup = DStyle.setupgithub!()
 println(setup.badge)
 # [![DStyle](https://github.com/your-org/your-repo/actions/workflows/dstyle.yml/badge.svg)](...)
 ```
