@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/D3MZ/DStyle.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/D3MZ/DStyle.jl)
 
-Tests against my personal style of clean code that both humans and machines can read easily.
+Tests codebases against my personal style of clean & fast code that both humans and machines can read easily. It tries to limit the vocabulary and the way things are done without hurting expressiveness. 
 
 # Features
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
@@ -13,7 +13,7 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 - [ ] Modules and type names use capitalization and camel case: module SparseArrays, struct UnitRange.
 - [ ] Functions are lowercase (maximum, convert) and, when readable, with multiple words squashed together (isequal, haskey). 
 - [ ] Functions do not contain underscores.
-- [ ] Functions that return a Bool must be prefixed with approved predicate prefixes (ie. is, has, can, etc)
+- [ ] Functions that return a Bool must be prefixed with approved predicate prefixes (ie. is, can, etc)
 - [ ] No abbreviation in function names (indexin rather than indxin)
 - [ ] functions mutating at least one of their arguments end in !.
 - [ ] Field names do not repeat the type name
@@ -21,7 +21,7 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 
 # Logic
 ### Separate kernel functions (aka, function barriers)
-For every function, check if the loop is <= 1 lines away from it.
+How it works: For every function, check if the loop is <= 1 lines away from it.
 Pass
 ```julia
 function filltwos!(a)
