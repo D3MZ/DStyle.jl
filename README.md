@@ -7,9 +7,37 @@
 
 Tests codebases against my personal style of clean & fast code that both humans and machines can read easily. It tries to limit the vocabulary and the way things are done without hurting expressiveness.
 
-# Features
+# Usage
+
+Install:
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/D3MZ/DStyle.jl")
+```
+
+Run checks (Aqua.jl-like):
+```julia
+using DStyle
+
+violations = DStyle.test_all(paths = ["src/MyPkg.jl"]; throw = false)
+isempty(violations) || error("DStyle checks failed")
+```
+
+Generate a README badge:
+```julia
+using DStyle
+
+badge = DStyle.readme_badge(
+    paths = ["src/MyPkg.jl"],
+    link = "https://github.com/me/MyPkg/actions",
+)
+println(badge)
+```
+
+# Features (& TODO)
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
-- [ ] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
+- [x] [Adds a cool badge to your README.md with status](#adds-a-cool-badge-to-your-readmemd-with-status)
+- [x] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
 - [ ] [Modules and type names use capitalization and camel case](#modules-and-type-names-use-capitalization-and-camel-case) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Functions are lowercase and use squashed words when readable](#functions-are-lowercase-and-use-squashed-words-when-readable) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Functions do not contain underscores](#functions-do-not-contain-underscores) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
@@ -20,6 +48,28 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 - [ ] [Break functions into multiple definitions](#break-functions-into-multiple-definitions) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#Break-functions-into-multiple-definitions)
 
 # How it works
+
+### Adds a cool badge to your README.md with status
+How it works: `DStyle.readme_badge` runs style checks and produces a Shields.io badge snippet that reports pass/fail.
+Implementation: Reuse `test_all(...; throw=false)` to count violations, then map status to badge color/message and return Markdown.
+
+Pass
+```julia
+using DStyle
+
+badge = DStyle.readme_badge(paths = ["src/MyPkg.jl"], link = "https://github.com/me/MyPkg/actions")
+println(badge)
+# [![DStyle status](https://img.shields.io/badge/DStyle-pass-brightgreen?style=flat-square)](...)
+```
+
+Fail
+```julia
+using DStyle
+
+badge = DStyle.readme_badge(paths = ["src/NeedsRefactor.jl"])
+println(badge)
+# ![DStyle status](https://img.shields.io/badge/DStyle-fail%281%29-red?style=flat-square)
+```
 
 ### Separate kernel functions (aka, function barriers)
 How it works: Detect loops that are too close to dynamic setup code and require extracting loop bodies into a kernel helper function.
