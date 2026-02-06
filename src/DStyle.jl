@@ -1,6 +1,15 @@
 module DStyle
 
-export RuleViolation, check_kernel_function_barriers, readme_badge, test_all
+export RuleViolation,
+    check_kernel_function_barriers,
+    github_actions_badge,
+    github_actions_workflow,
+    install_github_actions!,
+    setupgithub!,
+    setup!,
+    setup_github_actions_badge!,
+    readme_badge,
+    test_all
 
 struct RuleViolation
     rule::Symbol
@@ -118,6 +127,26 @@ function test_all(;
 end
 
 """
+    test_all(pkg::Module; paths=nothing, max_lines_from_signature=1, throw=true)
+
+Aqua-style entrypoint. Runs checks for a package module by inferring its `src/`
+files from `pathof(pkg)`. You can still override `paths`.
+"""
+function test_all(
+    pkg::Module;
+    paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
+    max_lines_from_signature::Int = 1,
+    throw::Bool = true,
+)
+    check_paths = isnothing(paths) ? _module_source_paths(pkg) : collect(paths)
+    return test_all(
+        paths = check_paths,
+        max_lines_from_signature = max_lines_from_signature,
+        throw = throw,
+    )
+end
+
+"""
     readme_badge(; paths=nothing, max_lines_from_signature=1, label="DStyle", style="flat-square", link=nothing)
 
 Builds a Shields.io badge snippet for README files using current DStyle check
@@ -149,6 +178,152 @@ function readme_badge(;
     return "[$image]($(String(link)))"
 end
 
+"""
+    github_actions_workflow(; name="DStyle", julia_version="1.11", paths=nothing, workflow_filename="dstyle.yml", package_url="https://github.com/D3MZ/DStyle.jl")
+
+Returns a GitHub Actions workflow YAML string that runs `DStyle.test_all(...)`
+on `push` and `pull_request`.
+"""
+function github_actions_workflow(;
+    name::AbstractString = "DStyle",
+    julia_version::AbstractString = "1.11",
+    paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
+    workflow_filename::AbstractString = "dstyle.yml",
+    package_url::AbstractString = "https://github.com/D3MZ/DStyle.jl",
+)
+    test_call = isnothing(paths) ? "DStyle.test_all(throw=true)" :
+                "DStyle.test_all(paths=$( _julia_array_literal(paths) ); throw=true)"
+
+    return """
+name: $name
+on:
+  push:
+  pull_request:
+
+jobs:
+  dstyle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '$julia_version'
+      - name: Run DStyle checks
+        run: |
+          julia -e '
+            using Pkg
+            Pkg.add(url="$( _quote_julia_string(package_url) )")
+            using DStyle
+            $test_call
+          '
+"""
+end
+
+"""
+    install_github_actions!(; workflow_path=".github/workflows/dstyle.yml", kwargs...)
+
+Installs a generated DStyle workflow file into your repository and returns the
+written path.
+"""
+function install_github_actions!(;
+    workflow_path::AbstractString = joinpath(".github", "workflows", "dstyle.yml"),
+    kwargs...,
+)
+    mkpath(dirname(workflow_path))
+    write(workflow_path, github_actions_workflow(; kwargs...))
+    return String(workflow_path)
+end
+
+"""
+    github_actions_badge(repo; workflow_filename="dstyle.yml", label="DStyle", branch=nothing)
+
+Returns Markdown for a dynamic GitHub Actions badge for the provided repository
+`owner/repo`.
+"""
+function github_actions_badge(
+    repo::AbstractString;
+    workflow_filename::AbstractString = "dstyle.yml",
+    label::AbstractString = "DStyle",
+    branch::Union{Nothing, AbstractString} = nothing,
+)
+    image_url = "https://github.com/$(String(repo))/actions/workflows/$(String(workflow_filename))/badge.svg"
+    if !isnothing(branch)
+        image_url *= "?branch=$(_url_escape(String(branch)))"
+    end
+    workflow_url = "https://github.com/$(String(repo))/actions/workflows/$(String(workflow_filename))"
+    return "[![$(String(label))]($image_url)]($workflow_url)"
+end
+
+"""
+    github_actions_badge(; repo=nothing, workflow_filename="dstyle.yml", label="DStyle", branch=nothing)
+
+Like `github_actions_badge(repo; ...)`, but infers `repo` from
+`ENV[\"GITHUB_REPOSITORY\"]` or your local `git remote origin` when omitted.
+"""
+function github_actions_badge(;
+    repo::Union{Nothing, AbstractString} = nothing,
+    workflow_filename::AbstractString = "dstyle.yml",
+    label::AbstractString = "DStyle",
+    branch::Union{Nothing, AbstractString} = nothing,
+)
+    detected_repo = isnothing(repo) ? _infer_github_repo() : String(repo)
+    if isnothing(detected_repo)
+        throw(ArgumentError("Could not infer GitHub repo. Pass repo=\"owner/repo\"."))
+    end
+    return github_actions_badge(
+        something(detected_repo);
+        workflow_filename = workflow_filename,
+        label = label,
+        branch = branch,
+    )
+end
+
+"""
+    setup_github_actions_badge!(; workflow_path=".github/workflows/dstyle.yml", repo=nothing, branch=nothing, kwargs...)
+
+One-shot setup helper: writes the DStyle GitHub Actions workflow and returns
+the dynamic badge markdown (with inferred repo unless explicitly provided).
+Returns a named tuple `(workflow_path, repo, badge)`.
+"""
+function setup_github_actions_badge!(;
+    workflow_path::AbstractString = joinpath(".github", "workflows", "dstyle.yml"),
+    repo::Union{Nothing, AbstractString} = nothing,
+    branch::Union{Nothing, AbstractString} = nothing,
+    kwargs...,
+)
+    written = install_github_actions!(workflow_path = workflow_path; kwargs...)
+    workflow_filename = basename(workflow_path)
+    detected_repo = isnothing(repo) ? _infer_github_repo() : String(repo)
+    if isnothing(detected_repo)
+        throw(ArgumentError("Workflow installed, but repo could not be inferred. Pass repo=\"owner/repo\"."))
+    end
+    badge = github_actions_badge(
+        something(detected_repo);
+        workflow_filename = workflow_filename,
+        branch = branch,
+    )
+    return (workflow_path = written, repo = something(detected_repo), badge = badge)
+end
+
+"""
+    setupgithub!(; kwargs...)
+
+One-call GitHub setup. Installs the DStyle GitHub Actions workflow and returns
+`(workflow_path, repo, badge)` for immediate README usage.
+"""
+function setupgithub!(; kwargs...)
+    return setup_github_actions_badge!(; kwargs...)
+end
+
+"""
+    setup!(; kwargs...)
+
+Backward-compatible alias for `setupgithub!()`.
+"""
+function setup!(; kwargs...)
+    return setupgithub!(; kwargs...)
+end
+
 function _default_source_paths()
     source_dir = joinpath(pwd(), "src")
     if !isdir(source_dir)
@@ -163,6 +338,74 @@ function _default_source_paths()
         end
     end
     return sort!(files)
+end
+
+function _module_source_paths(pkg::Module)
+    module_entry = pathof(pkg)
+    if isnothing(module_entry)
+        throw(ArgumentError("Could not resolve source path for module $(nameof(pkg)). Pass paths=[...] explicitly."))
+    end
+
+    src_dir = dirname(String(module_entry))
+    if !isdir(src_dir)
+        throw(ArgumentError("Resolved src directory does not exist: $src_dir"))
+    end
+
+    files = String[]
+    for (root, _, names) in walkdir(src_dir)
+        for name in names
+            endswith(name, ".jl") || continue
+            push!(files, joinpath(root, name))
+        end
+    end
+    return sort!(files)
+end
+
+function _infer_github_repo()
+    from_env = get(ENV, "GITHUB_REPOSITORY", "")
+    if occursin(r"^[^/]+/[^/]+$", from_env)
+        return from_env
+    end
+
+    from_git = _readchomp_or_nothing(`git config --get remote.origin.url`)
+    isnothing(from_git) && return nothing
+    return _repo_from_remote_url(from_git)
+end
+
+function _repo_from_remote_url(url::AbstractString)
+    text = strip(String(url))
+    for pattern in (
+        r"^git@github\.com:([^/]+/[^/]+?)(?:\.git)?$",
+        r"^https?://github\.com/([^/]+/[^/]+?)(?:\.git)?$",
+        r"^ssh://git@github\.com/([^/]+/[^/]+?)(?:\.git)?$",
+    )
+        match_obj = match(pattern, text)
+        if !isnothing(match_obj)
+            return String(match_obj.captures[1])
+        end
+    end
+    return nothing
+end
+
+function _readchomp_or_nothing(cmd::Cmd)
+    try
+        text = readchomp(cmd)
+        return isempty(strip(text)) ? nothing : text
+    catch
+        return nothing
+    end
+end
+
+function _julia_array_literal(paths::AbstractVector{<:AbstractString})
+    escaped = ["\"$(_quote_julia_string(path))\"" for path in paths]
+    return "[" * join(escaped, ", ") * "]"
+end
+
+function _quote_julia_string(value::AbstractString)
+    text = String(value)
+    text = replace(text, "\\" => "\\\\")
+    text = replace(text, "\"" => "\\\"")
+    return text
 end
 
 function _shield_escape(value::AbstractString)

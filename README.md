@@ -17,13 +17,16 @@ Pkg.add(url = "https://github.com/D3MZ/DStyle.jl")
 
 Run checks (Aqua.jl-like):
 ```julia
+using Test
 using DStyle
+using MyPkg
 
-violations = DStyle.test_all(paths = ["src/MyPkg.jl"]; throw = false)
-isempty(violations) || error("DStyle checks failed")
+@testset "DStyle" begin
+    DStyle.test_all(MyPkg)
+end
 ```
 
-Generate a README badge:
+Generate a local (runtime) README badge:
 ```julia
 using DStyle
 
@@ -32,6 +35,15 @@ badge = DStyle.readme_badge(
     link = "https://github.com/me/MyPkg/actions",
 )
 println(badge)
+```
+
+Setup once (recommended):
+```julia
+using DStyle
+
+# run from your repo root
+setup = DStyle.setup!()
+println(setup.badge)
 ```
 
 # Features (& TODO)
@@ -69,6 +81,15 @@ using DStyle
 badge = DStyle.readme_badge(paths = ["src/NeedsRefactor.jl"])
 println(badge)
 # ![DStyle status](https://img.shields.io/badge/DStyle-fail%281%29-red?style=flat-square)
+```
+
+Dynamic CI badge (recommended):
+```julia
+using DStyle
+
+setup = DStyle.setup!()
+println(setup.badge)
+# [![DStyle](https://github.com/your-org/your-repo/actions/workflows/dstyle.yml/badge.svg)](...)
 ```
 
 ### Separate kernel functions (aka, function barriers)

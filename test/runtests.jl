@@ -74,6 +74,14 @@ using Test
         end
     end
 
+    @testset "test_all module API" begin
+        # Aqua-style call form
+        @test isempty(DStyle.test_all(DStyle; throw = false, max_lines_from_signature = 1000))
+
+        # Modules without a resolvable package path should ask for explicit paths.
+        @test_throws ArgumentError DStyle.test_all(Main; throw = false)
+    end
+
     @testset "readme_badge" begin
         mktempdir() do dir
             good_file = joinpath(dir, "good.jl")
@@ -112,6 +120,62 @@ using Test
             linked_badge = DStyle.readme_badge(paths = [good_file], link = "https://example.com")
             @test startswith(linked_badge, "[![DStyle status](")
             @test endswith(linked_badge, "](https://example.com)")
+        end
+    end
+
+    @testset "GitHub Actions helpers" begin
+        workflow = DStyle.github_actions_workflow(paths = ["src/MyPkg.jl"])
+        @test occursin("name: DStyle", workflow)
+        @test occursin("uses: julia-actions/setup-julia@v2", workflow)
+        @test occursin("DStyle.test_all(paths=[\"src/MyPkg.jl\"]; throw=true)", workflow)
+
+        default_workflow = DStyle.github_actions_workflow()
+        @test occursin("DStyle.test_all(throw=true)", default_workflow)
+
+        mktempdir() do dir
+            workflow_path = joinpath(dir, ".github", "workflows", "dstyle.yml")
+            written = DStyle.install_github_actions!(
+                workflow_path = workflow_path,
+                paths = ["src/MyPkg.jl", "src/other.jl"],
+            )
+            @test written == workflow_path
+            @test isfile(workflow_path)
+
+            contents = read(workflow_path, String)
+            @test occursin("DStyle.test_all(paths=[\"src/MyPkg.jl\", \"src/other.jl\"]; throw=true)", contents)
+        end
+
+        badge = DStyle.github_actions_badge("octocat/hello-world")
+        @test badge == "[![DStyle](https://github.com/octocat/hello-world/actions/workflows/dstyle.yml/badge.svg)](https://github.com/octocat/hello-world/actions/workflows/dstyle.yml)"
+
+        branch_badge = DStyle.github_actions_badge(
+            "octocat/hello-world";
+            workflow_filename = "custom.yml",
+            branch = "main",
+        )
+        @test occursin("/custom.yml/badge.svg?branch=main", branch_badge)
+
+        mktempdir() do dir
+            oldpwd = pwd()
+            oldrepo = get(ENV, "GITHUB_REPOSITORY", nothing)
+            try
+                cd(dir)
+                run(`git init -q`)
+                run(`git remote add origin git@github.com:octocat/hello-world.git`)
+
+                result = DStyle.setup!(paths = ["src/MyPkg.jl"])
+                @test result.workflow_path == joinpath(".github", "workflows", "dstyle.yml")
+                @test result.repo == "octocat/hello-world"
+                @test occursin("octocat/hello-world/actions/workflows/dstyle.yml/badge.svg", result.badge)
+                @test isfile(joinpath(".github", "workflows", "dstyle.yml"))
+            finally
+                cd(oldpwd)
+                if isnothing(oldrepo)
+                    delete!(ENV, "GITHUB_REPOSITORY")
+                else
+                    ENV["GITHUB_REPOSITORY"] = oldrepo
+                end
+            end
         end
     end
 end
