@@ -7,13 +7,13 @@
 
 Tests against my personal style of clean code that both humans and machines can read easily.
 
-Features
+# Features
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
-- [ ] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) [Reference](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
+- [ ] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
 - [ ] Modules and type names use capitalization and camel case: module SparseArrays, struct UnitRange.
 - [ ] Functions are lowercase (maximum, convert) and, when readable, with multiple words squashed together (isequal, haskey). 
 - [ ] Functions do not contain underscores.
-- [ ] Functions that return a Bool must be prefixed with is or has
+- [ ] Functions that return a Bool must be prefixed with approved predicate prefixes (ie. is, has, can, etc)
 - [ ] No abbreviation in function names (indexin rather than indxin)
 - [ ] functions mutating at least one of their arguments end in !.
 - [ ] Field names do not repeat the type name
