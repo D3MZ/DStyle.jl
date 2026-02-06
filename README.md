@@ -5,45 +5,200 @@
 [![Build Status](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/D3MZ/DStyle.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/D3MZ/DStyle.jl)
 
-Tests codebases against my personal style of clean & fast code that both humans and machines can read easily. It tries to limit the vocabulary and the way things are done without hurting expressiveness. 
+Tests codebases against my personal style of clean & fast code that both humans and machines can read easily. It tries to limit the vocabulary and the way things are done without hurting expressiveness.
 
 # Features
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
 - [ ] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
-- [ ] Modules and type names use capitalization and camel case: module SparseArrays, struct UnitRange.
-- [ ] Functions are lowercase (maximum, convert) and, when readable, with multiple words squashed together (isequal, haskey). 
-- [ ] Functions do not contain underscores.
-- [ ] Functions that return a Bool must be prefixed with approved predicate prefixes (ie. is, can, etc)
-- [ ] No abbreviation in function names (indexin rather than indxin)
-- [ ] functions mutating at least one of their arguments end in !.
-- [ ] Field names do not repeat the type name
-- [ ] [Break functions into multiple definitions](https://docs.julialang.org/en/v1/manual/performance-tips/#Break-functions-into-multiple-definitions)
+- [ ] [Modules and type names use capitalization and camel case](#modules-and-type-names-use-capitalization-and-camel-case) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [Functions are lowercase and use squashed words when readable](#functions-are-lowercase-and-use-squashed-words-when-readable) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [Functions do not contain underscores](#functions-do-not-contain-underscores) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [Functions that return Bool use approved predicate prefixes](#functions-that-return-bool-use-approved-predicate-prefixes) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [No abbreviation in function names](#no-abbreviation-in-function-names) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [Functions mutating at least one argument end in `!`](#functions-mutating-at-least-one-argument-end-in-bang) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Append-!-to-names-of-functions-that-modify-their-arguments)
+- [ ] [Field names do not repeat the type name](#field-names-do-not-repeat-the-type-name) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [ ] [Break functions into multiple definitions](#break-functions-into-multiple-definitions) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#Break-functions-into-multiple-definitions)
 
-# Logic
+# How it works
+
 ### Separate kernel functions (aka, function barriers)
-How it works: For every function, check if the loop is <= 1 lines away from it.
+How it works: Detect loops that are too close to dynamic setup code and require extracting loop bodies into a kernel helper function.
+Implementation: For each function body, if a `for` or `while` loop appears immediately after setup lines and is not inside a helper call, raise a violation.
+
 Pass
 ```julia
 function filltwos!(a)
     for i = eachindex(a)
         a[i] = 2
     end
-end;
+end
 
 function strangetwos(n)
     a = Vector{rand(Bool) ? Int64 : Float64}(undef, n)
     filltwos!(a)
     return a
-end;
+end
 ```
 
 Fail
 ```julia
 function strangetwos(n)
-           a = Vector{rand(Bool) ? Int64 : Float64}(undef, n)
-           for i = 1:n
-               a[i] = 2
-           end
-           return a
-       end;
+    a = Vector{rand(Bool) ? Int64 : Float64}(undef, n)
+    for i = 1:n
+        a[i] = 2
+    end
+    return a
+end
+```
+
+### Modules and type names use capitalization and camel case
+How it works: Enforce `UpperCamelCase` names for modules, structs, and abstract/concrete type definitions.
+Implementation: Match `module`, `struct`, `mutable struct`, and `abstract type` declarations; reject names that do not start with uppercase or contain snake_case separators.
+
+Pass
+```julia
+module SparseArraysExt
+
+struct UnitRangeLike
+    start::Int
+    stop::Int
+end
+
+end
+```
+
+Fail
+```julia
+module sparse_arrays_ext
+
+struct unit_range_like
+    start::Int
+    stop::Int
+end
+
+end
+```
+
+### Functions are lowercase and use squashed words when readable
+How it works: Require function identifiers to start lowercase and avoid `CamelCase` in method names.
+Implementation: Parse function declarations (`function foo`, `foo(args) = ...`) and flag names containing uppercase letters.
+
+Pass
+```julia
+maximumvalue(xs) = maximum(xs)
+haskeysafe(dict, key) = haskey(dict, key)
+```
+
+Fail
+```julia
+MaximumValue(xs) = maximum(xs)
+hasKeySafe(dict, key) = haskey(dict, key)
+```
+
+### Functions do not contain underscores
+How it works: Forbid underscore-separated function names.
+Implementation: Scan function identifiers and fail when `_` exists in the base function name.
+
+Pass
+```julia
+loadtable(path) = read(path, String)
+```
+
+Fail
+```julia
+load_table(path) = read(path, String)
+```
+
+### Functions that return Bool use approved predicate prefixes
+How it works: Boolean-returning functions must start with approved prefixes (`is`, `has`, `can`, `should`).
+Implementation: Infer Bool return from explicit `::Bool`, Boolean literals, or clear predicate expressions and validate the function name prefix.
+
+Pass
+```julia
+isvalid(x)::Bool = x > 0
+cantrade(balance)::Bool = balance > 0
+```
+
+Fail
+```julia
+valid(x)::Bool = x > 0
+tradeable(balance)::Bool = balance > 0
+```
+
+### No abbreviation in function names
+How it works: Catch compressed names that reduce readability (for example `indxin` instead of `indexin`).
+Implementation: Maintain a denylist/heuristic for common abbreviations and report function names that match suspicious short forms.
+
+Pass
+```julia
+indexinneedle(needle, haystack) = findfirst(==(needle), haystack)
+```
+
+Fail
+```julia
+indxin(needle, haystack) = findfirst(==(needle), haystack)
+```
+
+### Functions mutating at least one argument end in bang
+How it works: Mutating methods must end with `!`.
+Implementation: Detect assignment into argument-backed storage (`x[i] =`, `setfield!`, `push!` on argument) and enforce a trailing `!` in the function name.
+
+Pass
+```julia
+function normalize!(xs)
+    s = sum(xs)
+    xs ./= s
+    return xs
+end
+```
+
+Fail
+```julia
+function normalize(xs)
+    s = sum(xs)
+    xs ./= s
+    return xs
+end
+```
+
+### Field names do not repeat the type name
+How it works: Keep struct field names concise by avoiding repeated type tokens.
+Implementation: Tokenize type name and field names, then fail when a field begins with or duplicates the type stem.
+
+Pass
+```julia
+struct OrderBook
+    bids
+    asks
+end
+```
+
+Fail
+```julia
+struct OrderBook
+    orderbookbids
+    orderbookasks
+end
+```
+
+### Break functions into multiple definitions
+How it works: Prefer dispatch-based method splits over broad branching on runtime types.
+Implementation: Find functions with deep `if/elseif` trees that dispatch on `isa` or `typeof` checks and suggest split method definitions.
+
+Pass
+```julia
+score(x::Int) = x + 1
+score(x::AbstractFloat) = x + 0.5
+```
+
+Fail
+```julia
+function score(x)
+    if x isa Int
+        return x + 1
+    elseif x isa AbstractFloat
+        return x + 0.5
+    end
+    return x
+end
 ```
