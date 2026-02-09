@@ -1,10 +1,11 @@
 # DStyle
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://D3MZ.github.io/DStyle.jl/stable/)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://D3MZ.github.io/DStyle.jl/dev/)
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://d3mz.github.io/DStyle.jl/dev/)
 [![Build Status](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/D3MZ/DStyle.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![DStyle](https://github.com/D3MZ/DStyle.jl/actions/workflows/dstyle.yml/badge.svg?branch=main)](https://github.com/D3MZ/DStyle.jl/actions/workflows/dstyle.yml)
 [![Coverage](https://codecov.io/gh/D3MZ/DStyle.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/D3MZ/DStyle.jl)
 
+Warning: This is Vibe Coded. Tests are updated everytime an edge case is found.
 Tests codebases against my personal style of clean & fast code that both humans and machines can read easily. It tries to limit the vocabulary and the way things are done without hurting expressiveness.
 
 # Usage
@@ -26,6 +27,8 @@ using YourPackageName
 end
 ```
 (`YourPackageName` is your package module name.)
+Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true)` or disable with `kernel_function_barriers=false` / `julia_index_from_length=false`.
+This repository also runs `DStyle.test_all(DStyle)` in `.github/workflows/dstyle.yml`.
 
 Generate a local (runtime) README badge:
 ```julia
@@ -51,6 +54,7 @@ println(setup.badge)
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
 - [x] [Adds a cool badge to your README.md with status](#adds-a-cool-badge-to-your-readmemd-with-status)
 - [x] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
+- [x] [Indexing with indices obtained from `length`, `size` etc is discouraged (JuliaIndexFromLength)](#indexing-with-indices-obtained-from-length-size-etc-is-discouraged-juliaindexfromlength) - [via Julia Docs](https://docs.julialang.org/en/v1/base/arrays/#Base.eachindex)
 - [ ] [Modules and type names use capitalization and camel case](#modules-and-type-names-use-capitalization-and-camel-case) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Functions are lowercase and use squashed words when readable](#functions-are-lowercase-and-use-squashed-words-when-readable) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Functions do not contain underscores](#functions-do-not-contain-underscores) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
@@ -120,6 +124,37 @@ function strangetwos(n)
         a[i] = 2
     end
     return a
+end
+```
+
+### Indexing with indices obtained from length, size etc is discouraged (JuliaIndexFromLength)
+How it works: Detect loops and indexing that derive bounds from `length` or `size`, which can break with non-1-based indexing.
+Implementation: Flag patterns like `for i in 1:length(x)`, `for i in 1:size(A, 1)`, and `x[1:length(x)]`; suggest `eachindex` or `axes`.
+
+Pass
+```julia
+function stableindexing(xs)
+    for i in eachindex(xs)
+        xs[i] += 1
+    end
+    return xs
+end
+
+function stabledims(A)
+    for i in axes(A, 1)
+        A[i, 1] = 0
+    end
+    return A
+end
+```
+
+Fail
+```julia
+function unstableindexing(xs)
+    for i in 1:length(xs)
+        xs[i] += 1
+    end
+    return xs
 end
 ```
 

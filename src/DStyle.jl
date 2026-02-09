@@ -5,13 +5,11 @@ using Test
 export RuleViolation,
     check_index_from_length,
     check_kernel_function_barriers,
-    check_redundant_int_quantity_names,
     github_actions_badge,
     github_actions_workflow,
     install_github_actions!,
     test_index_from_length,
     test_kernel_function_barriers,
-    test_redundant_int_quantity_names,
     setupgithub!,
     setup!,
     setup_github_actions_badge!,
@@ -168,123 +166,6 @@ function check_index_from_length(
     return violations
 end
 
-"""
-    check_redundant_int_quantity_names(source; file="<memory>")
-
-Reports `Int`-typed struct fields and function arguments whose names include
-redundant quantity words (e.g. `count`, `size`, `num`) that the type already
-communicates.
-"""
-function check_redundant_int_quantity_names(
-    source::AbstractString;
-    file::AbstractString = "<memory>",
-)
-    lines = split(source, '\n')
-    violations = RuleViolation[]
-
-    in_struct = false
-    struct_name = ""
-    struct_line = 0
-    struct_depth = 0
-
-    in_function_signature = false
-    function_name = ""
-    function_line = 0
-    signature_lines = String[]
-
-    for (line_number, raw_line) in pairs(lines)
-        code_line = _strip_comment(raw_line)
-        isempty(strip(code_line)) && continue
-
-        if !in_struct
-            struct_match = match(
-                r"^\s*(?:(?:[A-Za-z_]\w*\.)?@[A-Za-z_]\w*\s+)*(?:mutable\s+)?struct\s+([A-Za-z_]\w*)",
-                code_line,
-            )
-            if !isnothing(struct_match)
-                in_struct = true
-                struct_name = String(struct_match.captures[1])
-                struct_line = line_number
-                struct_depth = _block_delta(code_line)
-                continue
-            end
-        else
-            field_match = match(r"^\s*([A-Za-z_]\w*)\s*::\s*([A-Za-z_]\w*)", code_line)
-            if !isnothing(field_match)
-                field_name = String(field_match.captures[1])
-                field_type = String(field_match.captures[2])
-                if _is_integer_like_type(field_type) && _has_redundant_quantity_word(field_name)
-                    message = "name '$field_name' redundantly encodes quantity for an integer-typed field"
-                    hint = "prefer type-driven naming, e.g. '$(_compact_int_name(field_name))::$field_type'"
-                    push!(
-                        violations,
-                        RuleViolation(
-                            :redundant_int_quantity_name,
-                            String(file),
-                            struct_name,
-                            struct_line,
-                            line_number,
-                            message,
-                            hint,
-                        ),
-                    )
-                end
-            end
-
-            struct_depth += _block_delta(code_line)
-            if struct_depth <= 0
-                in_struct = false
-            end
-            continue
-        end
-
-        if in_function_signature
-            push!(signature_lines, code_line)
-            if occursin(')', code_line)
-                signature_text = join(signature_lines, " ")
-                append!(
-                    violations,
-                    _function_signature_violations(
-                        signature_text,
-                        function_name,
-                        function_line,
-                        String(file),
-                    ),
-                )
-                in_function_signature = false
-                empty!(signature_lines)
-            end
-            continue
-        end
-
-        long_match = match(r"^\s*function\s+([A-Za-z_]\w*[!]?)\s*\(", code_line)
-        if !isnothing(long_match)
-            function_name = String(long_match.captures[1])
-            function_line = line_number
-            if occursin(')', code_line)
-                append!(
-                    violations,
-                    _function_signature_violations(code_line, function_name, function_line, String(file)),
-                )
-            else
-                in_function_signature = true
-                push!(signature_lines, code_line)
-            end
-            continue
-        end
-
-        short_match = match(r"^\s*([A-Za-z_]\w*[!]?)\s*\([^)]*\)\s*=", code_line)
-        if !isnothing(short_match)
-            short_name = String(short_match.captures[1])
-            append!(
-                violations,
-                _function_signature_violations(code_line, short_name, line_number, String(file)),
-            )
-        end
-    end
-
-    return violations
-end
 
 """
     test_kernel_function_barriers(paths; max_lines_from_signature=1, broken=false, show_details=!broken)
@@ -371,44 +252,6 @@ function test_index_from_length(
 end
 
 """
-    test_redundant_int_quantity_names(paths; broken=false, show_details=!broken)
-
-Test that integer-typed fields and function arguments avoid redundant quantity
-words in their names.
-"""
-function test_redundant_int_quantity_names(
-    paths::AbstractVector{<:AbstractString};
-    broken::Bool = false,
-    show_details::Bool = !broken,
-)
-    violations = RuleViolation[]
-    for path in paths
-        source = read(path, String)
-        append!(violations, check_redundant_int_quantity_names(source; file = path))
-    end
-
-    if !isempty(violations) && show_details
-        println(stderr, _format_violation_report(violations))
-    end
-
-    if broken
-        @test_broken isempty(violations)
-    else
-        @test isempty(violations)
-    end
-    return violations
-end
-
-function test_redundant_int_quantity_names(
-    testtarget::Module;
-    paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
-    kwargs...,
-)
-    check_paths = isnothing(paths) ? _module_source_paths(testtarget) : collect(paths)
-    return test_redundant_int_quantity_names(check_paths; kwargs...)
-end
-
-"""
     test_all(; paths=nothing, max_lines_from_signature=1, throw=true)
 
 Runs all currently implemented style checks over one or more Julia files.
@@ -417,7 +260,6 @@ function test_all(;
     paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
     max_lines_from_signature::Int = 1,
     julia_index_from_length::Bool = true,
-    redundant_int_quantity_names::Bool = false,
     throw::Bool = true,
 )
     check_paths = isnothing(paths) ? _default_source_paths() : collect(paths)
@@ -436,9 +278,6 @@ function test_all(;
         if julia_index_from_length
             append!(violations, check_index_from_length(source; file = path))
         end
-        if redundant_int_quantity_names
-            append!(violations, check_redundant_int_quantity_names(source; file = path))
-        end
     end
 
     if throw && !isempty(violations)
@@ -450,7 +289,7 @@ function test_all(;
 end
 
 """
-    test_all(testtarget::Module; kernel_function_barriers=true, julia_index_from_length=true, redundant_int_quantity_names=true, paths=nothing)
+    test_all(testtarget::Module; kernel_function_barriers=true, julia_index_from_length=true, paths=nothing)
 
 Aqua-style entrypoint. Runs style tests for `testtarget` using `@testset`.
 Use `kernel_function_barriers=false` to disable the check, or pass a
@@ -460,7 +299,6 @@ function test_all(
     testtarget::Module;
     kernel_function_barriers = true,
     julia_index_from_length = true,
-    redundant_int_quantity_names = false,
     paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
 )
     if kernel_function_barriers !== false
@@ -478,15 +316,6 @@ function test_all(
                 testtarget;
                 paths = paths,
                 _askwargs(julia_index_from_length)...,
-            )
-        end
-    end
-    if redundant_int_quantity_names !== false
-        @testset "Type-driven Int quantity names" begin
-            test_redundant_int_quantity_names(
-                testtarget;
-                paths = paths,
-                _askwargs(redundant_int_quantity_names)...,
             )
         end
     end
@@ -722,8 +551,6 @@ function _rule_display_name(rule::Symbol)
         return "kernel function barrier"
     elseif rule == :julia_index_from_length
         return "JuliaIndexFromLength"
-    elseif rule == :redundant_int_quantity_name
-        return "redundant Int quantity name"
     else
         return String(rule)
     end
@@ -906,94 +733,6 @@ function _line_uses_index_from_length(line::AbstractString)
     return occursin(loop_pattern, line) ||
            occursin(range_index_pattern, line) ||
            occursin(scalar_index_pattern, line)
-end
-
-function _function_signature_violations(
-    signature::AbstractString,
-    function_name::AbstractString,
-    function_line::Int,
-    file::String,
-)
-    violations = RuleViolation[]
-
-    open_idx = findfirst('(', signature)
-    close_idx = findlast(')', signature)
-    if isnothing(open_idx) || isnothing(close_idx) || open_idx >= close_idx
-        return violations
-    end
-    first_param_idx = nextind(signature, open_idx)
-    first_param_idx >= close_idx && return violations
-    last_param_idx = prevind(signature, close_idx)
-    params = signature[first_param_idx:last_param_idx]
-
-    for m in eachmatch(r"([A-Za-z_]\w*)\s*::\s*([A-Za-z_]\w*)", params)
-        arg_name = String(m.captures[1])
-        arg_type = String(m.captures[2])
-        if _is_integer_like_type(arg_type) && _has_redundant_quantity_word(arg_name)
-            message = "name '$arg_name' redundantly encodes quantity for an integer-typed argument"
-            hint = "prefer type-driven naming, e.g. '$(_compact_int_name(arg_name))::$arg_type'"
-            push!(
-                violations,
-                RuleViolation(
-                    :redundant_int_quantity_name,
-                    file,
-                    String(function_name),
-                    function_line,
-                    function_line,
-                    message,
-                    hint,
-                ),
-            )
-        end
-    end
-    return violations
-end
-
-function _is_integer_like_type(type_name::AbstractString)
-    return type_name in (
-        "Int",
-        "Int8",
-        "Int16",
-        "Int32",
-        "Int64",
-        "Int128",
-        "UInt",
-        "UInt8",
-        "UInt16",
-        "UInt32",
-        "UInt64",
-        "UInt128",
-        "Integer",
-        "Signed",
-        "Unsigned",
-    )
-end
-
-function _has_redundant_quantity_word(name::AbstractString)
-    low = lowercase(String(name))
-    _is_plain_quantity_name(low) && return false
-    return !isnothing(match(r"(^|_)(count|size|length|num|number|qty|quantity|total)(_|$)", low))
-end
-
-function _compact_int_name(name::AbstractString)
-    low = lowercase(String(name))
-    compact = replace(low, r"(^|_)(count|size|length|num|number|qty|quantity|total)(_|$)" => "_")
-    compact = replace(compact, r"__+" => "_")
-    compact = strip(compact, '_')
-    return isempty(compact) ? "value" : compact
-end
-
-function _is_plain_quantity_name(name::AbstractString)
-    return lowercase(String(name)) in (
-        "count",
-        "size",
-        "length",
-        "num",
-        "number",
-        "qty",
-        "quantity",
-        "total",
-    )
 end
 
 function _function_name_from_definition(line::AbstractString)

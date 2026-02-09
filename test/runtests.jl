@@ -36,6 +36,54 @@ using Test
         @test violations[1].function_name == "strangetwos"
         @test violations[1].function_line == 1
         @test violations[1].loop_line == 3
+        @test occursin("first loop starts 2 lines after function signature (max: 1)", violations[1].message)
+        @test occursin("extract the loop into a kernel helper function", violations[1].hint)
+        @test occursin("example.jl:3: kernel_function_barrier:", string(violations[1]))
+        @test occursin("Hint:", string(violations[1]))
+    end
+
+    @testset "check_index_from_length" begin
+        pass_source = """
+        function stableindexing(xs, ys)
+            for i in eachindex(xs)
+                ys[i] = xs[i]
+            end
+            return ys
+        end
+
+        function stableaxes(A)
+            for i in axes(A, 1)
+                A[i, 1] = 0
+            end
+            return A
+        end
+        """
+
+        fail_source = """
+        function unstableindexing(xs)
+            for i in 1:length(xs)
+                xs[i] += 1
+            end
+            xs[length(xs)] = 0
+            return xs
+        end
+
+        function unstableaxes(A)
+            for i in 1:size(A, 1)
+                A[i, 1] = 0
+            end
+            return A
+        end
+        """
+
+        @test isempty(DStyle.check_index_from_length(pass_source))
+
+        violations = DStyle.check_index_from_length(fail_source; file = "indexing.jl")
+        @test length(violations) == 3
+        @test all(v -> v.rule == :julia_index_from_length, violations)
+        @test all(v -> v.file == "indexing.jl", violations)
+        @test occursin("JuliaIndexFromLength", violations[1].message)
+        @test occursin("use eachindex(array) or axes(array, dim)", violations[1].hint)
     end
 
     @testset "test_all" begin
@@ -75,11 +123,25 @@ using Test
     end
 
     @testset "test_all module API" begin
-        # Aqua-style call form
-        @test isempty(DStyle.test_all(DStyle; throw = false, max_lines_from_signature = 1000))
+        # Aqua-style self-check with default rule settings.
+        @test isnothing(DStyle.test_all(DStyle))
 
-        # Modules without a resolvable package path should ask for explicit paths.
-        @test_throws ArgumentError DStyle.test_all(Main; throw = false)
+        # Per-check kwargs are supported.
+        @test isnothing(
+            DStyle.test_all(
+                DStyle;
+                kernel_function_barriers = (max_lines_from_signature = 1000,),
+            ),
+        )
+
+        # Check can be disabled even for modules without package paths.
+        @test isnothing(
+            DStyle.test_all(
+                Main;
+                kernel_function_barriers = false,
+                julia_index_from_length = false,
+            ),
+        )
     end
 
     @testset "readme_badge" begin
@@ -120,6 +182,82 @@ using Test
             linked_badge = DStyle.readme_badge(paths = [good_file], link = "https://example.com")
             @test startswith(linked_badge, "[![DStyle status](")
             @test endswith(linked_badge, "](https://example.com)")
+        end
+    end
+
+    @testset "test_kernel_function_barriers" begin
+        mktempdir() do dir
+            good_file = joinpath(dir, "good.jl")
+            bad_file = joinpath(dir, "bad.jl")
+            write(
+                good_file,
+                """
+                function fastloop(x)
+                    for i = eachindex(x)
+                        x[i] += 1
+                    end
+                    return x
+                end
+                """,
+            )
+            write(
+                bad_file,
+                """
+                function slowloop(x)
+                    y = x
+                    for i = eachindex(y)
+                        y[i] += 1
+                    end
+                    return y
+                end
+                """,
+            )
+
+            @test isempty(DStyle.test_kernel_function_barriers([good_file]))
+
+            violations = DStyle.check_kernel_function_barriers(read(bad_file, String); file = bad_file)
+            @test length(violations) == 1
+
+            report = getfield(DStyle, Symbol("_format_violation_report"))(violations)
+            @test occursin("DStyle found 1 kernel function barrier violation(s)", report)
+            @test occursin("L3 slowloop:", report)
+        end
+    end
+
+    @testset "test_index_from_length" begin
+        mktempdir() do dir
+            good_file = joinpath(dir, "good.jl")
+            bad_file = joinpath(dir, "bad.jl")
+            write(
+                good_file,
+                """
+                function ok(xs)
+                    for i in eachindex(xs)
+                        xs[i] += 1
+                    end
+                    return xs
+                end
+                """,
+            )
+            write(
+                bad_file,
+                """
+                function bad(xs)
+                    for i in 1:length(xs)
+                        xs[i] += 1
+                    end
+                    return xs
+                end
+                """,
+            )
+
+            @test isempty(DStyle.test_index_from_length([good_file]))
+
+            violations = DStyle.check_index_from_length(read(bad_file, String); file = bad_file)
+            @test length(violations) == 1
+            report = getfield(DStyle, Symbol("_format_violation_report"))(violations)
+            @test occursin("DStyle found 1 JuliaIndexFromLength violation(s)", report)
+            @test occursin("L2 bad:", report)
         end
     end
 

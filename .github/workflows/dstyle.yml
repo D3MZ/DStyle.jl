@@ -1,0 +1,32 @@
+name: DStyle
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  dstyle:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v2
+      - name: Run DStyle on DStyle
+        run: |
+          julia --project -e '
+            using Pkg
+            Pkg.instantiate()
+            using Test
+            using DStyle
+            @testset "DStyle self-check" begin
+                DStyle.test_all(DStyle)
+            end
+          '
