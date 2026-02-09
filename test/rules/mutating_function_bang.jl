@@ -120,3 +120,32 @@ end
         @test only(violations).function_name == "bump"
     end
 end
+
+@testset "mutating constructors for macro structs and const aliases are exempt" begin
+    source = """
+    @kwdef mutable struct GPAgent
+        active::Bool = false
+    end
+
+    const Orders{T} = Vector{T}
+
+    function GPAgent(xs)
+        xs[1] = 1
+        return xs
+    end
+
+    function Orders(xs)
+        xs[1] = 1
+        return xs
+    end
+
+    function bump(xs)
+        xs[1] = 1
+        return xs
+    end
+    """
+
+    violations = DStyle.check_mutating_function_bang(source; file = "constructors.jl")
+    @test length(violations) == 1
+    @test only(violations).function_name == "bump"
+end

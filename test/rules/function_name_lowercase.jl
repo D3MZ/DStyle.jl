@@ -126,3 +126,21 @@ end
         @test only(violations).function_name == "RunFast"
     end
 end
+
+@testset "macro structs and const aliases are constructor exempt" begin
+    source = """
+    @kwdef mutable struct GPAgent
+        active::Bool = false
+    end
+
+    const Orders{T} = Vector{T}
+
+    GPAgent(x) = x
+    Orders(x) = x
+    RunFast(x) = x
+    """
+
+    violations = DStyle.check_function_name_lowercase(source; file = "constructors.jl")
+    @test length(violations) == 1
+    @test only(violations).function_name == "RunFast"
+end

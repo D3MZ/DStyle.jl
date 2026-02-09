@@ -74,6 +74,7 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 - [x] [Indexing with indices obtained from `length`, `size` etc is discouraged (JuliaIndexFromLength)](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/base/arrays/#Base.eachindex)
 - [x] [Modules and type names use capitalization and camel case](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [x] [Functions are lowercase and use squashed words when readable](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [x] [Constructor exemptions include macro structs and const type aliases](#constructor-exemptions-include-macro-structs-and-const-type-aliases)
 - [ ] Functions that return Bool use approved predicate prefixes - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] No abbreviation in function names - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [x] [Functions mutating at least one argument end in `!`](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Append-!-to-names-of-functions-that-modify-their-arguments)
@@ -103,3 +104,20 @@ println(result.added_to_test_target)
 ```
 
 `setupgithub!()` runs this by default and returns the metadata in `setup.test_dependency`.
+
+### Constructor exemptions include macro structs and const type aliases
+
+`function_name_lowercase` and `mutating_function_bang` now treat these as constructor names:
+
+```julia
+@kwdef mutable struct GPAgent
+    active::Bool = false
+end
+
+const Orders{T} = Vector{T}
+
+GPAgent(x) = x
+Orders(x) = x
+```
+
+These constructor names are exempt from lowercase and mutating-`!` name checks.

@@ -121,21 +121,38 @@ function collectdeclaredtypenames(source::AbstractString)
         codeline = stripcomment(rawline)
         isempty(strip(codeline)) && return
 
-        structmatch = match(r"^\s*(?:mutable\s+)?struct\s+([A-Za-z_]\w*)\b", codeline)
+        normalized = replace(codeline, r"^\s*(?:@[\w\.!]+\s+)+" => "")
+
+        structmatch = match(r"^\s*(?:mutable\s+)?struct\s+([A-Za-z_]\w*)\b", normalized)
         if !isnothing(structmatch)
             push!(names, String(structmatch.captures[1]))
             return
         end
 
-        abstractmatch = match(r"^\s*abstract\s+type\s+([A-Za-z_]\w*)\b", codeline)
+        abstractmatch = match(r"^\s*abstract\s+type\s+([A-Za-z_]\w*)\b", normalized)
         if !isnothing(abstractmatch)
             push!(names, String(abstractmatch.captures[1]))
             return
         end
 
-        primitivematch = match(r"^\s*primitive\s+type\s+([A-Za-z_]\w*)\b", codeline)
+        primitivematch = match(r"^\s*primitive\s+type\s+([A-Za-z_]\w*)\b", normalized)
         if !isnothing(primitivematch)
             push!(names, String(primitivematch.captures[1]))
+            return
+        end
+
+        constgenericaliasmatch = match(r"^\s*const\s+([A-Za-z_]\w*)\s*\{[^=]+\}\s*=", normalized)
+        if !isnothing(constgenericaliasmatch)
+            push!(names, String(constgenericaliasmatch.captures[1]))
+            return
+        end
+
+        constaliasmatch = match(
+            r"^\s*const\s+([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|Union|Tuple|NamedTuple)\b",
+            normalized,
+        )
+        if !isnothing(constaliasmatch)
+            push!(names, String(constaliasmatch.captures[1]))
             return
         end
     end
