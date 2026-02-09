@@ -1,14 +1,20 @@
 """
-    check_function_name_lowercase(source; file="<memory>")
+    check_function_name_lowercase(source; file="<memory>", constructor_names=nothing)
 
 Checks that function names use lowercase/squashed words. Constructors are exempt.
 """
 function check_function_name_lowercase(
     source::AbstractString;
     file::AbstractString = "<memory>",
+    constructor_names::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
 )
     lines = split(source, '\n')
     typenames = collectdeclaredtypenames(source)
+    if !isnothing(constructor_names)
+        foreach(constructor_names) do name
+            push!(typenames, String(name))
+        end
+    end
     violations = RuleViolation[]
 
     foreach(pairs(lines)) do (linenumber, rawline)

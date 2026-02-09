@@ -75,3 +75,54 @@ end
     @test length(violations) == 1
     @test only(violations).rule == :function_name_lowercase
 end
+
+@testset "constructors from other files are exempt" begin
+    mktempdir() do dir
+        types_file = joinpath(dir, "types.jl")
+        constructors_file = joinpath(dir, "constructors.jl")
+        bad_file = joinpath(dir, "bad.jl")
+
+        write(
+            types_file,
+            """
+            struct Orders
+                x
+            end
+
+            struct Agent
+                x
+            end
+
+            struct State
+                x
+            end
+            """,
+        )
+
+        write(
+            constructors_file,
+            """
+            Orders(x) = x
+            Agent(x) = x
+            State(x) = x
+            """,
+        )
+
+        write(
+            bad_file,
+            """
+            RunFast(x) = x
+            """,
+        )
+
+        @test isempty(DStyle.test_function_name_lowercase([types_file, constructors_file]))
+        bad_source = read(bad_file, String)
+        violations = DStyle.check_function_name_lowercase(
+            bad_source;
+            file = bad_file,
+            constructor_names = ["Orders", "Agent", "State"],
+        )
+        @test length(violations) == 1
+        @test only(violations).function_name == "RunFast"
+    end
+end

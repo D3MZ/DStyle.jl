@@ -119,10 +119,23 @@ function test_function_name_lowercase(
     broken::Bool = false,
     show_details::Bool = !broken,
 )
+    typenames = Set{String}()
+    foreach(paths) do path
+        source = read(path, String)
+        union!(typenames, collectdeclaredtypenames(source))
+    end
+
     violations = RuleViolation[]
     foreach(paths) do path
         source = read(path, String)
-        append!(violations, check_function_name_lowercase(source; file = path))
+        append!(
+            violations,
+            check_function_name_lowercase(
+                source;
+                file = path,
+                constructor_names = typenames,
+            ),
+        )
     end
 
     if !isempty(violations) && show_details
@@ -226,6 +239,13 @@ function test_all(;
     throw::Bool = true,
 )
     checkpaths = isnothing(paths) ? defaultsourcepaths() : collect(paths)
+    typenames = Set{String}()
+    if function_name_lowercase
+        foreach(checkpaths) do path
+            source = read(path, String)
+            union!(typenames, collectdeclaredtypenames(source))
+        end
+    end
     violations = RuleViolation[]
 
     foreach(checkpaths) do path
@@ -246,7 +266,14 @@ function test_all(;
             append!(violations, check_module_type_camel_case(source; file = path))
         end
         if function_name_lowercase
-            append!(violations, check_function_name_lowercase(source; file = path))
+            append!(
+                violations,
+                check_function_name_lowercase(
+                    source;
+                    file = path,
+                    constructor_names = typenames,
+                ),
+            )
         end
         if mutating_function_bang
             append!(violations, check_mutating_function_bang(source; file = path))
