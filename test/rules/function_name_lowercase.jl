@@ -64,3 +64,14 @@ end
         @test !isempty(DStyle.check_function_name_lowercase(read(bad_file, String); file = bad_file))
     end
 end
+
+@testset "check_function_name_lowercase handles default Unicode args" begin
+    pass_source = "runmean(λ=1)=λ"
+    fail_source = "RunMean(λ=1)=λ"
+
+    @test isempty(DStyle.check_function_name_lowercase(pass_source))
+
+    violations = DStyle.check_function_name_lowercase(fail_source; file = "unicode-default.jl")
+    @test length(violations) == 1
+    @test only(violations).rule == :function_name_lowercase
+end

@@ -84,3 +84,16 @@ end
         @test !isempty(DStyle.check_field_name_type_repetition(read(bad_file, String); file = bad_file))
     end
 end
+
+@testset "check_field_name_type_repetition handles default Unicode args" begin
+    source = """
+    struct Agent
+        state
+    end
+
+    getstate(agent::Agent, λ=1)=agent
+    """
+    violations = DStyle.check_field_name_type_repetition(source; file = "unicode-default.jl")
+    @test length(violations) == 1
+    @test only(violations).rule == :field_name_type_repetition
+end

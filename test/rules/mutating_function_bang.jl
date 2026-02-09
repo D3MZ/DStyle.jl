@@ -59,3 +59,10 @@ end
         @test !isempty(DStyle.check_mutating_function_bang(read(bad_file, String); file = bad_file))
     end
 end
+
+@testset "check_mutating_function_bang handles default Unicode args" begin
+    source = "touch(xs, λ=1)=(push!(xs, λ); xs)"
+    violations = DStyle.check_mutating_function_bang(source; file = "unicode-default.jl")
+    @test length(violations) == 1
+    @test only(violations).rule == :mutating_function_bang
+end

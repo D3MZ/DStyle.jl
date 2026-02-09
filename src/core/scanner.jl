@@ -58,7 +58,9 @@ end
 function stripcomment(line::AbstractString)
     idx = findfirst('#', line)
     isnothing(idx) && return String(line)
-    return String(line[1:(idx - 1)])
+    idx == firstindex(line) && return ""
+    stop = prevind(line, idx)
+    return String(line[firstindex(line):stop])
 end
 
 function lineusesindexfromlength(line::AbstractString)
@@ -185,6 +187,51 @@ function simplifytypename(typespec::AbstractString)
     return text
 end
 
+function findtoplevelassignindex(line::AbstractString)
+    isempty(line) && return nothing
+
+    parendepth = 0
+    bracketdepth = 0
+    bracedepth = 0
+    index = firstindex(line)
+
+    while index <= lastindex(line)
+        c = line[index]
+        if c == '('
+            parendepth += 1
+        elseif c == ')'
+            parendepth = max(parendepth - 1, 0)
+        elseif c == '['
+            bracketdepth += 1
+        elseif c == ']'
+            bracketdepth = max(bracketdepth - 1, 0)
+        elseif c == '{'
+            bracedepth += 1
+        elseif c == '}'
+            bracedepth = max(bracedepth - 1, 0)
+        elseif c == '=' && parendepth == 0 && bracketdepth == 0 && bracedepth == 0
+            previouschar = if index > firstindex(line)
+                line[prevind(line, index)]
+            else
+                '\0'
+            end
+            nextchar = if index < lastindex(line)
+                line[nextind(line, index)]
+            else
+                '\0'
+            end
+
+            if previouschar != '=' && nextchar != '=' && nextchar != '>'
+                return index
+            end
+        end
+
+        index = nextind(line, index)
+    end
+
+    return nothing
+end
+
 function parsefunctiondeclaration(line::AbstractString)
     functionmatch = match(r"^\s*function\s+([A-Za-z_]\w*[!]?)\s*(?:\(|$)", line)
     if !isnothing(functionmatch)
@@ -194,12 +241,14 @@ function parsefunctiondeclaration(line::AbstractString)
         return (name = name, args = args, body = nothing, islong = true)
     end
 
-    equalindex = findfirst('=', line)
+    equalindex = findtoplevelassignindex(line)
     if isnothing(equalindex)
         return nothing
     end
 
-    left = strip(String(line[1:(equalindex - 1)]))
+    equalindex == firstindex(line) && return nothing
+    leftstop = prevind(line, equalindex)
+    left = strip(String(line[firstindex(line):leftstop]))
     if isempty(left)
         return nothing
     end
@@ -215,7 +264,12 @@ function parsefunctiondeclaration(line::AbstractString)
     name = String(shortmatch.captures[1])
     openmatch = findfirst('(', left)
     args = isnothing(openmatch) ? nothing : parenthesizedsegment(left, openmatch)
-    body = strip(String(line[(equalindex + 1):end]))
+    body = if equalindex == lastindex(line)
+        ""
+    else
+        bodystart = nextind(line, equalindex)
+        strip(String(line[bodystart:lastindex(line)]))
+    end
     return (name = name, args = args, body = body, islong = false)
 end
 
