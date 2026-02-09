@@ -27,7 +27,7 @@ using YourPackageName
 end
 ```
 (`YourPackageName` is your package module name.)
-Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true)` or disable with `kernel_function_barriers=false` / `julia_index_from_length=false`.
+Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true, module_type_camel_case=true, function_name_lowercase=true, mutating_function_bang=true, field_name_type_repetition=true)` or disable checks with `rule_name=false`.
 This repository also runs `DStyle.test_all(DStyle)` in `.github/workflows/dstyle.yml`.
 
 ## Repository layout
@@ -71,13 +71,12 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 - [x] [Adds a cool badge to your README.md with status](#adds-a-cool-badge-to-your-readmemd-with-status)
 - [x] [Separate kernel functions (aka, function barriers)](#separate-kernel-functions-aka-function-barriers) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
 - [x] [Indexing with indices obtained from `length`, `size` etc is discouraged (JuliaIndexFromLength)](#indexing-with-indices-obtained-from-length-size-etc-is-discouraged-juliaindexfromlength) - [via Julia Docs](https://docs.julialang.org/en/v1/base/arrays/#Base.eachindex)
-- [ ] [Modules and type names use capitalization and camel case](#modules-and-type-names-use-capitalization-and-camel-case) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
-- [ ] [Functions are lowercase and use squashed words when readable](#functions-are-lowercase-and-use-squashed-words-when-readable) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
-- [ ] [Functions do not contain underscores](#functions-do-not-contain-underscores) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [x] [Modules and type names use capitalization and camel case](#modules-and-type-names-use-capitalization-and-camel-case) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [x] [Functions are lowercase and use squashed words when readable](#functions-are-lowercase-and-use-squashed-words-when-readable) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Functions that return Bool use approved predicate prefixes](#functions-that-return-bool-use-approved-predicate-prefixes) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [No abbreviation in function names](#no-abbreviation-in-function-names) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
-- [ ] [Functions mutating at least one argument end in `!`](#functions-mutating-at-least-one-argument-end-in-bang) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Append-!-to-names-of-functions-that-modify-their-arguments)
-- [ ] [Field names do not repeat the type name](#field-names-do-not-repeat-the-type-name) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
+- [x] [Functions mutating at least one argument end in `!`](#functions-mutating-at-least-one-argument-end-in-bang) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Append-!-to-names-of-functions-that-modify-their-arguments)
+- [x] [Field names do not repeat the type name](#field-names-do-not-repeat-the-type-name) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] [Break functions into multiple definitions](#break-functions-into-multiple-definitions) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#Break-functions-into-multiple-definitions)
 
 # How it works
@@ -203,8 +202,8 @@ end
 ```
 
 ### Functions are lowercase and use squashed words when readable
-How it works: Require function identifiers to start lowercase and avoid `CamelCase` in method names.
-Implementation: Parse function declarations (`function foo`, `foo(args) = ...`) and flag names containing uppercase letters.
+How it works: Require function identifiers to start lowercase and avoid `CamelCase` in method names. Constructors are exempt.
+Implementation: Parse function declarations (`function foo`, `foo(args) = ...`) and flag names containing uppercase letters unless the name matches a declared type constructor.
 
 Pass
 ```julia
@@ -216,20 +215,6 @@ Fail
 ```julia
 MaximumValue(xs) = maximum(xs)
 hasKeySafe(dict, key) = haskey(dict, key)
-```
-
-### Functions do not contain underscores
-How it works: Forbid underscore-separated function names.
-Implementation: Scan function identifiers and fail when `_` exists in the base function name.
-
-Pass
-```julia
-loadtable(path) = read(path, String)
-```
-
-Fail
-```julia
-load_table(path) = read(path, String)
 ```
 
 ### Functions that return Bool use approved predicate prefixes
@@ -264,7 +249,7 @@ indxin(needle, haystack) = findfirst(==(needle), haystack)
 
 ### Functions mutating at least one argument end in bang
 How it works: Mutating methods must end with `!`.
-Implementation: Detect assignment into argument-backed storage (`x[i] =`, `setfield!`, `push!` on argument) and enforce a trailing `!` in the function name.
+Implementation: Detect assignment into argument-backed storage (`x[i] =`, `x.field =`, `x .= ...`) and mutating calls (`push!(x, ...)`) and enforce a trailing `!` in the function name.
 
 Pass
 ```julia
@@ -285,8 +270,8 @@ end
 ```
 
 ### Field names do not repeat the type name
-How it works: Keep struct field names concise by avoiding repeated type tokens.
-Implementation: Tokenize type name and field names, then fail when a field begins with or duplicates the type stem.
+How it works: Keep names concise by avoiding repeated type tokens in struct fields and typed function arguments.
+Implementation: For structs, fail when a field begins with the type stem (for example `orderbookbids` in `OrderBook`). For functions, fail when typed argument names duplicate their type names (for example `agent::Agent`) and suggest concise names.
 
 Pass
 ```julia
@@ -294,6 +279,8 @@ struct OrderBook
     bids
     asks
 end
+
+get(a::Agent, b::Broker, e::Environment) = (a, b, e)
 ```
 
 Fail
@@ -302,6 +289,9 @@ struct OrderBook
     orderbookbids
     orderbookasks
 end
+
+getstate(agent::Agent, broker::Broker, environment::Environment) = (agent, broker, environment)
+# hint: get(a::Agent, b::Broker, e::Environment)
 ```
 
 ### Break functions into multiple definitions

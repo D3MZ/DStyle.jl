@@ -3,6 +3,14 @@ function ruledisplayname(rule::Symbol)
         return "kernel function barrier"
     elseif rule == :julia_index_from_length
         return "JuliaIndexFromLength"
+    elseif rule == :module_type_camel_case
+        return "module/type camel case"
+    elseif rule == :function_name_lowercase
+        return "function lowercase naming"
+    elseif rule == :mutating_function_bang
+        return "mutating function bang"
+    elseif rule == :field_name_type_repetition
+        return "type-name repetition"
     else
         return String(rule)
     end

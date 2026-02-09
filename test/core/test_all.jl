@@ -49,6 +49,10 @@ end
             Main;
             kernel_function_barriers = false,
             julia_index_from_length = false,
+            module_type_camel_case = false,
+            function_name_lowercase = false,
+            mutating_function_bang = false,
+            field_name_type_repetition = false,
         ),
     )
 end

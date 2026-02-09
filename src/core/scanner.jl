@@ -106,3 +106,156 @@ function blockdelta(line::AbstractString)
     closes = countkeyword(line, "end")
     return opens - closes
 end
+
+function uppercamelcase(name::AbstractString)
+    return occursin(r"^[A-Z][A-Za-z0-9]*$", String(name))
+end
+
+function collectdeclaredtypenames(source::AbstractString)
+    names = Set{String}()
+    lines = split(source, '\n')
+
+    foreach(lines) do rawline
+        codeline = stripcomment(rawline)
+        isempty(strip(codeline)) && return
+
+        structmatch = match(r"^\s*(?:mutable\s+)?struct\s+([A-Za-z_]\w*)\b", codeline)
+        if !isnothing(structmatch)
+            push!(names, String(structmatch.captures[1]))
+            return
+        end
+
+        abstractmatch = match(r"^\s*abstract\s+type\s+([A-Za-z_]\w*)\b", codeline)
+        if !isnothing(abstractmatch)
+            push!(names, String(abstractmatch.captures[1]))
+            return
+        end
+
+        primitivematch = match(r"^\s*primitive\s+type\s+([A-Za-z_]\w*)\b", codeline)
+        if !isnothing(primitivematch)
+            push!(names, String(primitivematch.captures[1]))
+            return
+        end
+    end
+
+    return names
+end
+
+function parenthesizedsegment(text::AbstractString, openindex::Int)
+    depth = 0
+    closeindex = 0
+
+    foreach(openindex:lastindex(text)) do index
+        c = text[index]
+        if c == '('
+            depth += 1
+        elseif c == ')'
+            depth -= 1
+            if depth == 0
+                closeindex = index
+            end
+        end
+    end
+
+    if closeindex == 0
+        return nothing
+    end
+    return String(text[openindex:closeindex])
+end
+
+function simplifytypename(typespec::AbstractString)
+    text = strip(String(typespec))
+    if isempty(text)
+        return nothing
+    end
+
+    if occursin('{', text)
+        text = first(split(text, '{'; limit = 2))
+    end
+    if occursin('<', text)
+        text = first(split(text, '<'; limit = 2))
+    end
+    if occursin(" where ", text)
+        text = first(split(text, " where "; limit = 2))
+    end
+    if occursin('.', text)
+        text = last(split(text, '.'))
+    end
+
+    text = strip(text)
+    isempty(text) && return nothing
+    return text
+end
+
+function parsefunctiondeclaration(line::AbstractString)
+    functionmatch = match(r"^\s*function\s+([A-Za-z_]\w*[!]?)\s*(?:\(|$)", line)
+    if !isnothing(functionmatch)
+        name = String(functionmatch.captures[1])
+        openmatch = findfirst('(', line)
+        args = isnothing(openmatch) ? nothing : parenthesizedsegment(line, openmatch)
+        return (name = name, args = args, body = nothing, islong = true)
+    end
+
+    equalindex = findfirst('=', line)
+    if isnothing(equalindex)
+        return nothing
+    end
+
+    left = strip(String(line[1:(equalindex - 1)]))
+    if isempty(left)
+        return nothing
+    end
+    if startswith(left, "if ") || startswith(left, "elseif ") || startswith(left, "for ") || startswith(left, "while ")
+        return nothing
+    end
+
+    shortmatch = match(r"^([A-Za-z_]\w*[!]?)\s*\(", left)
+    if isnothing(shortmatch)
+        return nothing
+    end
+
+    name = String(shortmatch.captures[1])
+    openmatch = findfirst('(', left)
+    args = isnothing(openmatch) ? nothing : parenthesizedsegment(left, openmatch)
+    body = strip(String(line[(equalindex + 1):end]))
+    return (name = name, args = args, body = body, islong = false)
+end
+
+function parsefunctionarguments(argspec::Union{Nothing, AbstractString})
+    isnothing(argspec) && return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    text = String(something(argspec))
+    isempty(text) && return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    if firstindex(text) == lastindex(text)
+        return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    end
+
+    inner = text[(firstindex(text) + 1):(lastindex(text) - 1)]
+    normalized = replace(inner, ';' => ',')
+    parts = split(normalized, ',')
+    args = NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+
+    foreach(parts) do part
+        token = strip(part)
+        isempty(token) && return
+        token = strip(first(split(token, '='; limit = 2)))
+        isempty(token) && return
+
+        namepart = token
+        typepart = nothing
+        if occursin("::", token)
+            sides = split(token, "::"; limit = 2)
+            namepart = strip(sides[1])
+            typepart = simplifytypename(strip(sides[2]))
+        end
+
+        namepart = replace(namepart, "..." => "")
+        namematch = match(r"^([A-Za-z_]\w*)$", namepart)
+        isnothing(namematch) && return
+        push!(
+            args,
+            (name = String(namematch.captures[1]), type = isnothing(typepart) ? nothing : String(typepart)),
+        )
+    end
+
+    return args
+end

@@ -37,9 +37,9 @@ function modulesourcepaths(pkg::Module)
     return sort!(files)
 end
 
-function readchompornothing(cmd::Cmd)
+function readchompornothing(c::Cmd)
     try
-        text = readchomp(cmd)
+        text = readchomp(c)
         return isempty(strip(text)) ? nothing : text
     catch
         return nothing
