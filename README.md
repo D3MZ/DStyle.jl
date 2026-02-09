@@ -30,6 +30,22 @@ end
 Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true)` or disable with `kernel_function_barriers=false` / `julia_index_from_length=false`.
 This repository also runs `DStyle.test_all(DStyle)` in `.github/workflows/dstyle.yml`.
 
+## Repository layout
+
+```text
+src/
+  DStyle.jl                     # module entrypoint + includes
+  core/                         # shared scanner, runner, reporting, path/string utilities
+  rules/                        # one file per lint rule
+  integrations/                 # CI/GitHub workflow helpers
+
+test/
+  runtests.jl                   # test entrypoint
+  core/                         # runner-level behavior tests
+  rules/                        # per-rule tests
+  integrations/                 # workflow/badge tests
+```
+
 Generate a local (runtime) README badge:
 ```julia
 using DStyle
