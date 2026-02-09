@@ -1,3 +1,5 @@
+using TOML
+
 @testset "GitHub Actions helpers" begin
     workflow = DStyle.github_actions_workflow(paths = ["src/MyPkg.jl"])
     @test occursin("name: DStyle", workflow)
@@ -48,6 +50,11 @@
                 @test result.repo == "octocat/hello-world"
                 @test occursin("octocat/hello-world/actions/workflows/dstyle.yml/badge.svg", result.badge)
                 @test isfile(joinpath(".github", "workflows", "dstyle.yml"))
+                @test !isnothing(result.test_dependency)
+                @test result.test_dependency.project_path == "Project.toml"
+                project = TOML.parsefile("Project.toml")
+                @test project["extras"]["DStyle"] == "420f571e-3331-4aa3-9b68-c78ef2d7caab"
+                @test "DStyle" in project["targets"]["test"]
             end
         finally
             cd(oldpwd)

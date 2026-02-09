@@ -34,6 +34,7 @@ test_index_from_length
 ```@docs
 github_actions_workflow
 install_github_actions!
+install_test_dependency!
 github_actions_badge
 setup_github_actions_badge!
 setupgithub!

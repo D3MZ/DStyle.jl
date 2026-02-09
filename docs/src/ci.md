@@ -43,6 +43,15 @@ println(workflow_path)
 # .github/workflows/dstyle.yml
 ```
 
+## Add DStyle under extras/targets.test
+
+```julia
+using DStyle
+
+result = DStyle.install_test_dependency!(project_path = "Project.toml")
+println(result)
+```
+
 ## Generate a dynamic GitHub Actions badge
 
 ```julia
@@ -63,6 +72,7 @@ setup = DStyle.setupgithub!()
 println(setup.workflow_path)
 println(setup.repo)
 println(setup.badge)
+println(setup.test_dependency)
 ```
 
 `setup!()` is a backward-compatible alias.

@@ -10,5 +10,6 @@ using Test
     include("rules/mutating_function_bang.jl")
     include("rules/field_name_type_repetition.jl")
     include("integrations/github_actions.jl")
+    include("integrations/test_dependency.jl")
     include("integrations/readme_badge.jl")
 end

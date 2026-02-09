@@ -52,6 +52,17 @@ DStyle.test_all(
 )
 ```
 
+## Add DStyle as test-only dependency
+
+If you want DStyle tracked in your package `Project.toml` under `[extras]` and
+`[targets].test`:
+
+```julia
+using DStyle
+
+DStyle.install_test_dependency!(project_path = "Project.toml")
+```
+
 ## Collect violations without throwing
 
 Use the non-module entrypoint for scripting and custom reporting:

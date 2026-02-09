@@ -69,6 +69,7 @@ println(setup.badge)
 # Features (& TODO)
 Note: Passing examples could still fail due to other checks. It's not a style guide, the code inconsistency is for clarity.
 - [x] [Adds a cool badge to your README.md with status](https://d3mz.github.io/DStyle.jl/dev/ci/)
+- [x] [Adds DStyle under `[extras]` and `[targets].test`](#adds-dstyle-under-extras-and-targetstest)
 - [x] [Separate kernel functions (aka, function barriers)](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/performance-tips/#kernel-functions)
 - [x] [Indexing with indices obtained from `length`, `size` etc is discouraged (JuliaIndexFromLength)](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/base/arrays/#Base.eachindex)
 - [x] [Modules and type names use capitalization and camel case](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
@@ -87,3 +88,18 @@ The detailed rule examples and implementation notes now live in the docs site:
 - [Checks and Examples](https://d3mz.github.io/DStyle.jl/dev/checks/)
 - [CI and Badge Integration](https://d3mz.github.io/DStyle.jl/dev/ci/)
 - [API Reference](https://d3mz.github.io/DStyle.jl/dev/api/)
+
+### Adds DStyle under extras and targets.test
+
+Use `install_test_dependency!` when you want DStyle to be test-only in your package:
+
+```julia
+using DStyle
+
+result = DStyle.install_test_dependency!(project_path = "Project.toml")
+println(result.project_path)
+println(result.added_to_extras)
+println(result.added_to_test_target)
+```
+
+`setupgithub!()` runs this by default and returns the metadata in `setup.test_dependency`.
