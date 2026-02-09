@@ -18,6 +18,7 @@
     end
 
     get(a::Agent, b::Broker, e::Environment) = (a, b, e)
+    risk(a::Agent, μ) = a
     """
 
     fail_source = """

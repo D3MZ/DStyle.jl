@@ -13,6 +13,7 @@
     end
 
     load_table(x) = x
+    runmean(μ, x) = (μ + x) / 2
     """
 
     fail_source = """

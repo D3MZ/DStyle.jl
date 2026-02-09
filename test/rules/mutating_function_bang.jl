@@ -10,6 +10,7 @@
     end
 
     touch!(xs) = (push!(xs, 1); xs)
+    scale!(xs, μ) = (xs .*= μ; xs)
     """
 
     fail_source = """

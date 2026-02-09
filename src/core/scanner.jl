@@ -143,24 +143,22 @@ end
 
 function parenthesizedsegment(text::AbstractString, openindex::Int)
     depth = 0
-    closeindex = 0
+    index = openindex
 
-    foreach(openindex:lastindex(text)) do index
+    while index <= lastindex(text)
         c = text[index]
         if c == '('
             depth += 1
         elseif c == ')'
             depth -= 1
             if depth == 0
-                closeindex = index
+                return String(text[openindex:index])
             end
         end
+        index = nextind(text, index)
     end
 
-    if closeindex == 0
-        return nothing
-    end
-    return String(text[openindex:closeindex])
+    return nothing
 end
 
 function simplifytypename(typespec::AbstractString)
@@ -229,7 +227,12 @@ function parsefunctionarguments(argspec::Union{Nothing, AbstractString})
         return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
     end
 
-    inner = text[(firstindex(text) + 1):(lastindex(text) - 1)]
+    innerstart = nextind(text, firstindex(text))
+    innerstop = prevind(text, lastindex(text))
+    if innerstart > innerstop
+        return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    end
+    inner = text[innerstart:innerstop]
     normalized = replace(inner, ';' => ',')
     parts = split(normalized, ',')
     args = NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
