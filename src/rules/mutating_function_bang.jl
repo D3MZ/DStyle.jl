@@ -1,14 +1,20 @@
 """
-    check_mutating_function_bang(source; file="<memory>")
+    check_mutating_function_bang(source; file="<memory>", constructor_names=nothing)
 
 Checks that functions mutating at least one argument end with `!`.
 """
 function check_mutating_function_bang(
     source::AbstractString;
     file::AbstractString = "<memory>",
+    constructor_names::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
 )
     lines = split(source, '\n')
     typenames = collectdeclaredtypenames(source)
+    if !isnothing(constructor_names)
+        foreach(constructor_names) do name
+            push!(typenames, String(name))
+        end
+    end
     violations = RuleViolation[]
 
     infunction = Ref(false)

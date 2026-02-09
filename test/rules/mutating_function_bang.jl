@@ -66,3 +66,57 @@ end
     @test length(violations) == 1
     @test only(violations).rule == :mutating_function_bang
 end
+
+@testset "constructors from other files are exempt for mutating bang check" begin
+    mktempdir() do dir
+        types_file = joinpath(dir, "types.jl")
+        constructors_file = joinpath(dir, "constructors.jl")
+        bad_file = joinpath(dir, "bad.jl")
+
+        write(
+            types_file,
+            """
+            abstract type Agent end
+
+            struct Orders
+                x
+            end
+            """,
+        )
+
+        write(
+            constructors_file,
+            """
+            function Orders(a)
+                a[1] = 1
+                return a
+            end
+
+            function Agent(a)
+                a[1] = 1
+                return a
+            end
+            """,
+        )
+
+        write(
+            bad_file,
+            """
+            function bump(xs)
+                xs[1] += 1
+                return xs
+            end
+            """,
+        )
+
+        @test isempty(DStyle.test_mutating_function_bang([types_file, constructors_file]))
+        bad_source = read(bad_file, String)
+        violations = DStyle.check_mutating_function_bang(
+            bad_source;
+            file = bad_file,
+            constructor_names = ["Orders", "Agent"],
+        )
+        @test length(violations) == 1
+        @test only(violations).function_name == "bump"
+    end
+end

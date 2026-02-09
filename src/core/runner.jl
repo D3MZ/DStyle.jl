@@ -164,10 +164,23 @@ function test_mutating_function_bang(
     broken::Bool = false,
     show_details::Bool = !broken,
 )
+    typenames = Set{String}()
+    foreach(paths) do path
+        source = read(path, String)
+        union!(typenames, collectdeclaredtypenames(source))
+    end
+
     violations = RuleViolation[]
     foreach(paths) do path
         source = read(path, String)
-        append!(violations, check_mutating_function_bang(source; file = path))
+        append!(
+            violations,
+            check_mutating_function_bang(
+                source;
+                file = path,
+                constructor_names = typenames,
+            ),
+        )
     end
 
     if !isempty(violations) && show_details
@@ -240,7 +253,7 @@ function test_all(;
 )
     checkpaths = isnothing(paths) ? defaultsourcepaths() : collect(paths)
     typenames = Set{String}()
-    if function_name_lowercase
+    if function_name_lowercase || mutating_function_bang
         foreach(checkpaths) do path
             source = read(path, String)
             union!(typenames, collectdeclaredtypenames(source))
@@ -276,7 +289,14 @@ function test_all(;
             )
         end
         if mutating_function_bang
-            append!(violations, check_mutating_function_bang(source; file = path))
+            append!(
+                violations,
+                check_mutating_function_bang(
+                    source;
+                    file = path,
+                    constructor_names = typenames,
+                ),
+            )
         end
         if field_name_type_repetition
             append!(violations, check_field_name_type_repetition(source; file = path))
