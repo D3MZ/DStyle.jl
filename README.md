@@ -27,7 +27,7 @@ using YourPackageName
 end
 ```
 (`YourPackageName` is your package module name.)
-Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true, module_type_camel_case=true, function_name_lowercase=true, mutating_function_bang=true, field_name_type_repetition=true, simple_verb_redefinition=true)` or disable checks with `rule_name=false`.
+Per-check options follow Aqua style, e.g. `DStyle.test_all(YourPackageName; kernel_function_barriers=(max_lines_from_signature=2,), julia_index_from_length=true, module_type_camel_case=true, function_name_lowercase=true, mutating_function_bang=true, field_name_type_repetition=true, simple_verb_redefinition=true, ignore=["DataFrame", "DataFrames.DataFrame"])` or disable checks with `rule_name=false`.
 This repository also runs `DStyle.test_all(DStyle)` in `.github/workflows/dstyle.yml`.
 
 ## Repository layout
@@ -77,7 +77,11 @@ Note: Passing examples could still fail due to other checks. It's not a style gu
 - [x] [Constructor exemptions include macro structs and const type aliases](#constructor-exemptions-include-macro-structs-and-const-type-aliases)
 - [x] [Do not add new verbs that are simple aliases of existing verbs](#do-not-add-new-verbs-that-are-simple-aliases-of-existing-verbs)
 - [x] [Run checks on external codebases by path](#run-checks-on-external-codebases-by-path)
+- [x] [Cross-codebase style validation skill](#cross-codebase-style-validation-skill)
 - [x] [Warn mode emits style findings without failing](#warn-mode-emits-style-findings-without-failing)
+- [x] [test_all reads each source file once](#test_all-reads-each-source-file-once)
+- [x] [ignore list for external constructors in test_all/test_codebase](#ignore-list-for-external-constructors-in-test_alltest_codebase)
+- [x] [Core rules refactored to AST parsing](#core-rules-refactored-to-ast-parsing)
 - [ ] Functions that return Bool use approved predicate prefixes - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [ ] No abbreviation in function names - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Use-naming-conventions-consistent-with-Julia-base/)
 - [x] [Functions mutating at least one argument end in `!`](https://d3mz.github.io/DStyle.jl/dev/checks/) - [via Julia Docs](https://docs.julialang.org/en/v1/manual/style-guide/#Append-!-to-names-of-functions-that-modify-their-arguments)
@@ -156,6 +160,56 @@ violations = test_codebase(
 )
 
 println(length(violations))
+```
+
+### Cross-codebase style validation skill
+
+The repository includes a reusable skill at:
+
+`skills/cross-codebase-style-validation/SKILL.md`
+
+It defines a before/after workflow to run tests on all configured codebases,
+validate findings, and triage true positives versus edge cases.
+
+### test_all reads each source file once
+
+`test_all` now caches file contents before running checks so each file is read a
+single time per run:
+
+```julia
+violations = DStyle.test_all(
+    paths = ["src/MyPkg.jl", "src/extra.jl"];
+    throw = false,
+)
+```
+
+### ignore list for external constructors in test_all/test_codebase
+
+Use `ignore` to silence known external constructor or integration names:
+
+```julia
+violations = DStyle.test_codebase(
+    "/path/to/repo";
+    throw = false,
+    ignore = ["DataFrame", "DataFrames.DataFrame"],
+)
+```
+
+The same `ignore` argument is accepted by `test_all(...)`.
+
+### Core rules refactored to AST parsing
+
+Core rule checks now parse Julia AST instead of relying on regex matching:
+
+```julia
+source = """
+DataFrames.DataFrame(xs) = xs
+"""
+
+violations = DStyle.check_function_name_lowercase(
+    source;
+    ignore = ["DataFrame", "DataFrames.DataFrame"],
+)
 ```
 
 ### Warn mode emits style findings without failing

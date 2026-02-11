@@ -2,38 +2,28 @@ function check_simple_verb_redefinition(
     source::AbstractString;
     file::AbstractString = "<memory>",
 )
-    lines = split(source, '\n')
+    definitions = collectfunctiondefinitions(source)
     violations = RuleViolation[]
 
-    foreach(pairs(lines)) do (linenumber, rawline)
-        codeline = stripcomment(rawline)
-        isempty(strip(codeline)) && return
+    foreach(definitions) do definition
+        definition.islong && return
 
-        declaration = parsefunctiondeclaration(codeline)
-        isnothing(declaration) && return
-        declaration.islong && return
-
-        body = strip(String(something(declaration.body, "")))
-        call = parsecall(body)
+        call = parsecall(definition.body)
         isnothing(call) && return
+        call.short == definition.shortname && return
 
-        if call.short == declaration.name
-            return
-        end
-
-        args = parsefunctionarguments(declaration.args)
-        !forwards(call.args, args) && return
+        forwards(call.args, definition.args) || return
 
         push!(
             violations,
             RuleViolation(
                 :simple_verb_redefinition,
                 String(file),
-                declaration.name,
-                linenumber,
-                linenumber,
+                definition.name,
+                definition.line,
+                definition.line,
                 "function is a direct alias of `$(call.name)` with unchanged arguments",
-                "call `$(call.name)` directly instead of introducing alias verb `$(declaration.name)`",
+                "call `$(call.name)` directly instead of introducing alias verb `$(definition.name)`",
             ),
         )
     end
@@ -41,9 +31,8 @@ function check_simple_verb_redefinition(
     return violations
 end
 
-function parsecall(body::AbstractString)
-    expr = parseexpr(body)
-    isnothing(expr) && return nothing
+function parsecall(body)
+    expr = unwrapblockexpr(body)
     !(expr isa Expr) && return nothing
     expr.head != :call && return nothing
 
@@ -53,24 +42,22 @@ function parsecall(body::AbstractString)
     isnothing(short) && return nothing
 
     args = flattenargs(expr.args[2:end])
-    return (name = something(name), short = something(short), args = args)
+    return (name = String(something(name)), short = String(something(short)), args = args)
 end
 
-function parseexpr(text::AbstractString)
-    source = strip(String(text))
-    isempty(source) && return nothing
-
-    expr = try
-        Meta.parse(source)
-    catch
-        nothing
-    end
-    isnothing(expr) && return nothing
-
-    if expr isa Expr && expr.head == :error
+function unwrapblockexpr(node)
+    if node isa Expr && node.head == :block
+        for arg in node.args
+            if arg isa Expr
+                return arg
+            end
+            if arg isa Symbol
+                return arg
+            end
+        end
         return nothing
     end
-    return expr
+    return node
 end
 
 function flattenargs(parts)
@@ -114,45 +101,4 @@ function sameargument(callarg, argname::Symbol)
     end
 
     return false
-end
-
-function rendername(node)
-    if node isa Symbol
-        return String(node)
-    end
-    if node isa Expr && node.head == :. && length(node.args) == 2
-        left = rendername(node.args[1])
-        right = renderfield(node.args[2])
-        if isnothing(left) || isnothing(right)
-            return nothing
-        end
-        return "$(something(left)).$(something(right))"
-    end
-    return nothing
-end
-
-function shortname(node)
-    if node isa Symbol
-        return String(node)
-    end
-    if node isa Expr && node.head == :. && length(node.args) == 2
-        return renderfield(node.args[2])
-    end
-    return nothing
-end
-
-function renderfield(node)
-    if node isa Symbol
-        return String(node)
-    end
-    if node isa QuoteNode && node.value isa Symbol
-        return String(node.value)
-    end
-    if node isa QuoteNode && node.value isa Expr
-        expr = node.value
-        if expr.head == :quote && length(expr.args) == 1 && expr.args[1] isa Symbol
-            return String(expr.args[1])
-        end
-    end
-    return nothing
 end

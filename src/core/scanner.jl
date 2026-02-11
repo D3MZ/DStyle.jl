@@ -63,121 +63,45 @@ function stripcomment(line::AbstractString)
     return String(line[firstindex(line):stop])
 end
 
-function lineusesindexfromlength(line::AbstractString)
-    looppattern = r"\bfor\b[^\n]*\b(?:in|=)\s*\d+\s*:\s*(?:length|size)\s*\("
-    rangeindexpattern = r"\b\w+\s*\[[^\]\n]*:\s*(?:length|size)\s*\("
-    scalarindexpattern = r"\b\w+\s*\[\s*(?:length|size)\s*\("
-    return occursin(looppattern, line) ||
-           occursin(rangeindexpattern, line) ||
-           occursin(scalarindexpattern, line)
-end
+function parseexpr(text::AbstractString)
+    source = strip(String(text))
+    isempty(source) && return nothing
 
-function functionnamefromdefinition(line::AbstractString)
-    matchobj = match(r"^\s*function\s+([A-Za-z_]\w*[!]?)(?:\s*\(|\s*$)", line)
-    if isnothing(matchobj)
+    expr = try
+        Meta.parse(source; raise = false)
+    catch
+        nothing
+    end
+    isnothing(expr) && return nothing
+    if expr isa Expr && (expr.head == :error || expr.head == :incomplete)
         return nothing
     end
-    return String(matchobj.captures[1])
+    return expr
 end
 
-function istoplevelloop(line::AbstractString)
-    return !isnothing(match(r"^\s*(for|while)\b", line))
+function parsesourcetree(source::AbstractString)
+    wrapped = "begin\n$(String(source))\nend"
+    expr = try
+        Meta.parse(wrapped; raise = false)
+    catch
+        return nothing
+    end
+    if expr isa Expr && (expr.head == :error || expr.head == :incomplete)
+        return nothing
+    end
+    return expr
 end
 
-function countkeyword(line::AbstractString, keyword::AbstractString)
-    pattern = keyword == "mutable struct" ? r"\bmutable\s+struct\b" : Regex("\\b$(keyword)\\b")
-    return length(collect(eachmatch(pattern, line)))
+function sourceline(line::Int)
+    return max(line - 1, 1)
 end
 
-function blockdelta(line::AbstractString)
-    opens = 0
-
-    opens += countkeyword(line, "function")
-    opens += countkeyword(line, "for")
-    opens += countkeyword(line, "while")
-    opens += countkeyword(line, "if")
-    opens += countkeyword(line, "let")
-    opens += countkeyword(line, "begin")
-    opens += countkeyword(line, "try")
-    opens += countkeyword(line, "quote")
-    opens += countkeyword(line, "struct")
-    opens += countkeyword(line, "module")
-    opens += countkeyword(line, "mutable struct")
-    opens += countkeyword(line, "baremodule")
-
-    closes = countkeyword(line, "end")
-    return opens - closes
+function sourceline(node::LineNumberNode)
+    return sourceline(node.line)
 end
 
 function uppercamelcase(name::AbstractString)
     return occursin(r"^[A-Z][A-Za-z0-9]*$", String(name))
-end
-
-function collectdeclaredtypenames(source::AbstractString)
-    names = Set{String}()
-    lines = split(source, '\n')
-
-    foreach(lines) do rawline
-        codeline = stripcomment(rawline)
-        isempty(strip(codeline)) && return
-
-        normalized = replace(codeline, r"^\s*(?:@[\w\.!]+\s+)+" => "")
-
-        structmatch = match(r"^\s*(?:mutable\s+)?struct\s+([A-Za-z_]\w*)\b", normalized)
-        if !isnothing(structmatch)
-            push!(names, String(structmatch.captures[1]))
-            return
-        end
-
-        abstractmatch = match(r"^\s*abstract\s+type\s+([A-Za-z_]\w*)\b", normalized)
-        if !isnothing(abstractmatch)
-            push!(names, String(abstractmatch.captures[1]))
-            return
-        end
-
-        primitivematch = match(r"^\s*primitive\s+type\s+([A-Za-z_]\w*)\b", normalized)
-        if !isnothing(primitivematch)
-            push!(names, String(primitivematch.captures[1]))
-            return
-        end
-
-        constgenericaliasmatch = match(r"^\s*const\s+([A-Za-z_]\w*)\s*\{[^=]+\}\s*=", normalized)
-        if !isnothing(constgenericaliasmatch)
-            push!(names, String(constgenericaliasmatch.captures[1]))
-            return
-        end
-
-        constaliasmatch = match(
-            r"^\s*const\s+([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|Union|Tuple|NamedTuple)\b",
-            normalized,
-        )
-        if !isnothing(constaliasmatch)
-            push!(names, String(constaliasmatch.captures[1]))
-            return
-        end
-    end
-
-    return names
-end
-
-function parenthesizedsegment(text::AbstractString, openindex::Int)
-    depth = 0
-    index = openindex
-
-    while index <= lastindex(text)
-        c = text[index]
-        if c == '('
-            depth += 1
-        elseif c == ')'
-            depth -= 1
-            if depth == 0
-                return String(text[openindex:index])
-            end
-        end
-        index = nextind(text, index)
-    end
-
-    return nothing
 end
 
 function simplifytypename(typespec::AbstractString)
@@ -204,49 +128,93 @@ function simplifytypename(typespec::AbstractString)
     return text
 end
 
-function findtoplevelassignindex(line::AbstractString)
-    isempty(line) && return nothing
+function parenthesizedsegment(text::AbstractString, openindex::Int)
+    return parenthesizedsegmentstep(text, openindex, openindex, 0)
+end
 
-    parendepth = 0
-    bracketdepth = 0
-    bracedepth = 0
-    index = firstindex(line)
-
-    while index <= lastindex(line)
-        c = line[index]
-        if c == '('
-            parendepth += 1
-        elseif c == ')'
-            parendepth = max(parendepth - 1, 0)
-        elseif c == '['
-            bracketdepth += 1
-        elseif c == ']'
-            bracketdepth = max(bracketdepth - 1, 0)
-        elseif c == '{'
-            bracedepth += 1
-        elseif c == '}'
-            bracedepth = max(bracedepth - 1, 0)
-        elseif c == '=' && parendepth == 0 && bracketdepth == 0 && bracedepth == 0
-            previouschar = if index > firstindex(line)
-                line[prevind(line, index)]
-            else
-                '\0'
-            end
-            nextchar = if index < lastindex(line)
-                line[nextind(line, index)]
-            else
-                '\0'
-            end
-
-            if previouschar != '=' && nextchar != '=' && nextchar != '>'
-                return index
-            end
-        end
-
-        index = nextind(line, index)
+function parenthesizedsegmentstep(
+    text::AbstractString,
+    openindex::Int,
+    index::Int,
+    depth::Int,
+)
+    if index > lastindex(text)
+        return nothing
     end
 
-    return nothing
+    c = text[index]
+    nextdepth = if c == '('
+        depth + 1
+    elseif c == ')'
+        depth - 1
+    else
+        depth
+    end
+
+    if c == ')' && nextdepth == 0
+        return String(text[openindex:index])
+    end
+
+    return parenthesizedsegmentstep(text, openindex, nextind(text, index), nextdepth)
+end
+
+function findtoplevelassignindex(line::AbstractString)
+    isempty(line) && return nothing
+    return findtoplevelassignindexstep(line, firstindex(line), 0, 0, 0)
+end
+
+function findtoplevelassignindexstep(
+    line::AbstractString,
+    index::Int,
+    parendepth::Int,
+    bracketdepth::Int,
+    bracedepth::Int,
+)
+    if index > lastindex(line)
+        return nothing
+    end
+
+    c = line[index]
+    nextparen = parendepth
+    nextbracket = bracketdepth
+    nextbrace = bracedepth
+
+    if c == '('
+        nextparen += 1
+    elseif c == ')'
+        nextparen = max(nextparen - 1, 0)
+    elseif c == '['
+        nextbracket += 1
+    elseif c == ']'
+        nextbracket = max(nextbracket - 1, 0)
+    elseif c == '{'
+        nextbrace += 1
+    elseif c == '}'
+        nextbrace = max(nextbrace - 1, 0)
+    elseif c == '=' && parendepth == 0 && bracketdepth == 0 && bracedepth == 0
+        previouschar = if index > firstindex(line)
+            line[prevind(line, index)]
+        else
+            '\0'
+        end
+        nextchar = if index < lastindex(line)
+            line[nextind(line, index)]
+        else
+            '\0'
+        end
+
+        if previouschar != '=' && nextchar != '=' && nextchar != '>'
+            return index
+        end
+    end
+
+    return findtoplevelassignindexstep(
+        line,
+        nextind(line, index),
+        nextparen,
+        nextbracket,
+        nextbrace,
+    )
 end
 
 function parsefunctiondeclaration(line::AbstractString)
@@ -288,6 +256,207 @@ function parsefunctiondeclaration(line::AbstractString)
         strip(String(line[bodystart:lastindex(line)]))
     end
     return (name = name, args = args, body = body, islong = false)
+end
+
+function simplifytypename(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa QuoteNode && node.value isa Symbol
+        return String(node.value)
+    end
+    if node isa Expr && node.head == :curly && !isempty(node.args)
+        return simplifytypename(node.args[1])
+    end
+    if node isa Expr && node.head == :where && !isempty(node.args)
+        return simplifytypename(node.args[1])
+    end
+    if node isa Expr && node.head == :<: && !isempty(node.args)
+        return simplifytypename(node.args[1])
+    end
+    if node isa Expr && node.head == :>: && !isempty(node.args)
+        return simplifytypename(node.args[1])
+    end
+    if node isa Expr && node.head == :.
+        return shortname(node)
+    end
+    return nothing
+end
+
+function renderfield(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa QuoteNode && node.value isa Symbol
+        return String(node.value)
+    end
+    if node isa QuoteNode && node.value isa Expr
+        expr = node.value
+        if expr.head == :quote && length(expr.args) == 1 && expr.args[1] isa Symbol
+            return String(expr.args[1])
+        end
+    end
+    return nothing
+end
+
+function rendername(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa Expr && node.head == :. && length(node.args) == 2
+        left = rendername(node.args[1])
+        right = renderfield(node.args[2])
+        if isnothing(left) || isnothing(right)
+            return nothing
+        end
+        return "$(something(left)).$(something(right))"
+    end
+    return nothing
+end
+
+function shortname(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa Expr && node.head == :. && length(node.args) == 2
+        return renderfield(node.args[2])
+    end
+    return nothing
+end
+
+function signaturecall(signature)
+    if signature isa Symbol
+        return Expr(:call, signature)
+    end
+    if signature isa Expr && signature.head == :call
+        return signature
+    end
+    if signature isa Expr && signature.head == :where && !isempty(signature.args)
+        return signaturecall(signature.args[1])
+    end
+    if signature isa Expr && signature.head == :(::) && !isempty(signature.args)
+        return signaturecall(signature.args[1])
+    end
+    return nothing
+end
+
+function shortdefinitioncall(signature)
+    if signature isa Expr && signature.head == :call
+        return signature
+    end
+    if signature isa Expr && signature.head == :where && !isempty(signature.args)
+        return shortdefinitioncall(signature.args[1])
+    end
+    if signature isa Expr && signature.head == :(::) && !isempty(signature.args)
+        return shortdefinitioncall(signature.args[1])
+    end
+    return nothing
+end
+
+function extracttypename(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa QuoteNode && node.value isa Symbol
+        return String(node.value)
+    end
+    if node isa Expr && node.head == :curly && !isempty(node.args)
+        return extracttypename(node.args[1])
+    end
+    if node isa Expr && node.head == :where && !isempty(node.args)
+        return extracttypename(node.args[1])
+    end
+    if node isa Expr && node.head == :<: && !isempty(node.args)
+        return extracttypename(node.args[1])
+    end
+    if node isa Expr && node.head == :>: && !isempty(node.args)
+        return extracttypename(node.args[1])
+    end
+    if node isa Expr && node.head == :.
+        return shortname(node)
+    end
+    return nothing
+end
+
+function istypealiasrhs(node)
+    if node isa Symbol
+        return true
+    end
+    if node isa Expr && (node.head == :. || node.head == :curly || node.head == :where)
+        return true
+    end
+    if node isa Expr && node.head == :call && !isempty(node.args)
+        name = shortname(node.args[1])
+        return !isnothing(name) && (String(something(name)) in ("Union", "Tuple", "NamedTuple"))
+    end
+    return false
+end
+
+function collectconstalias!(node, names::Set{String})
+    if !(node isa Expr) || node.head != :(=) || length(node.args) != 2
+        return nothing
+    end
+
+    aliasname = extracttypename(node.args[1])
+    if isnothing(aliasname)
+        return nothing
+    end
+    if !istypealiasrhs(node.args[2])
+        return nothing
+    end
+
+    push!(names, String(something(aliasname)))
+    return nothing
+end
+
+function collectdeclaredtypenames(source::AbstractString)
+    names = Set{String}()
+    tree = parsesourcetree(source)
+    isnothing(tree) && return names
+
+    collectdeclaredtypenames!(tree, names, 1)
+    return names
+end
+
+function collectdeclaredtypenames!(node, names::Set{String}, line::Int)
+    currentline = line
+
+    if node isa LineNumberNode
+        return sourceline(node)
+    end
+
+    if node isa Expr
+        if node.head == :struct && length(node.args) >= 2
+            name = extracttypename(node.args[2])
+            !isnothing(name) && push!(names, String(something(name)))
+        elseif node.head == :abstract && !isempty(node.args)
+            name = extracttypename(node.args[1])
+            !isnothing(name) && push!(names, String(something(name)))
+        elseif node.head == :primitive && !isempty(node.args)
+            name = extracttypename(node.args[1])
+            !isnothing(name) && push!(names, String(something(name)))
+        elseif node.head == :const && !isempty(node.args)
+            collectconstalias!(node.args[1], names)
+        end
+
+        foreach(node.args) do arg
+            currentline = collectdeclaredtypenames!(arg, names, currentline)
+        end
+        return currentline
+    end
+
+    if node isa QuoteNode && node.value isa Expr
+        return collectdeclaredtypenames!(node.value, names, currentline)
+    end
+
+    return currentline
+end
+
+function parsefunctionarguments(signature::Expr)
+    if signature.head != :call
+        return NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    end
+    return parsefunctionarguments(signature.args[2:end])
 end
 
 function parsefunctionarguments(argspec::Union{Nothing, AbstractString})
@@ -332,4 +501,178 @@ function parsefunctionarguments(argspec::Union{Nothing, AbstractString})
     end
 
     return args
+end
+
+function parsefunctionarguments(parts::AbstractVector)
+    positional = NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+    keywords = NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}[]
+
+    foreach(parts) do part
+        if part isa Expr && part.head == :parameters
+            foreach(part.args) do kw
+                binding = parseargumentbinding(kw)
+                isnothing(binding) && return
+                push!(keywords, something(binding))
+            end
+        else
+            binding = parseargumentbinding(part)
+            isnothing(binding) && return
+            push!(positional, something(binding))
+        end
+    end
+
+    return [positional..., keywords...]
+end
+
+function parseargumentbinding(node)
+    target = node
+    typeexpr = nothing
+
+    if target isa Expr && target.head == :kw && length(target.args) == 2
+        target = target.args[1]
+    end
+    if target isa Expr && target.head == :... && length(target.args) == 1
+        target = target.args[1]
+    end
+    if target isa Expr && target.head == :(::) && length(target.args) == 2
+        typeexpr = target.args[2]
+        target = target.args[1]
+    end
+
+    argname = extractargumentname(target)
+    isnothing(argname) && return nothing
+
+    argtype = isnothing(typeexpr) ? nothing : simplifytypename(typeexpr)
+    return (name = String(something(argname)), type = isnothing(argtype) ? nothing : String(something(argtype)))
+end
+
+function extractargumentname(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa Expr && node.head == :... && length(node.args) == 1
+        return extractargumentname(node.args[1])
+    end
+    if node isa Expr && node.head == :kw && length(node.args) == 2
+        return extractargumentname(node.args[1])
+    end
+    return nothing
+end
+
+function parsefunctiondefinition(node, line::Int)
+    if node isa Expr && node.head == :function && length(node.args) == 2
+        call = signaturecall(node.args[1])
+        isnothing(call) && return nothing
+        name = rendername(call.args[1])
+        short = shortname(call.args[1])
+        if isnothing(name) || isnothing(short)
+            return nothing
+        end
+        return (
+            name = String(something(name)),
+            shortname = String(something(short)),
+            args = parsefunctionarguments(something(call)),
+            body = node.args[2],
+            islong = true,
+            line = line,
+        )
+    end
+
+    if node isa Expr && node.head == :(=) && length(node.args) == 2
+        call = shortdefinitioncall(node.args[1])
+        isnothing(call) && return nothing
+        name = rendername(call.args[1])
+        short = shortname(call.args[1])
+        if isnothing(name) || isnothing(short)
+            return nothing
+        end
+        return (
+            name = String(something(name)),
+            shortname = String(something(short)),
+            args = parsefunctionarguments(something(call)),
+            body = node.args[2],
+            islong = false,
+            line = line,
+        )
+    end
+
+    return nothing
+end
+
+function collectfunctiondefinitions(source::AbstractString)
+    definitions = NamedTuple{
+        (:name, :shortname, :args, :body, :islong, :line),
+        Tuple{
+            String,
+            String,
+            Vector{NamedTuple{(:name, :type), Tuple{String, Union{Nothing, String}}}},
+            Any,
+            Bool,
+            Int,
+        },
+    }[]
+    tree = parsesourcetree(source)
+    isnothing(tree) && return definitions
+
+    collectfunctiondefinitions!(tree, definitions, 1)
+    return definitions
+end
+
+function collectfunctiondefinitions!(node, definitions, line::Int)
+    currentline = line
+
+    if node isa LineNumberNode
+        return sourceline(node)
+    end
+
+    if node isa Expr
+        definition = parsefunctiondefinition(node, currentline)
+        !isnothing(definition) && push!(definitions, something(definition))
+
+        foreach(node.args) do arg
+            currentline = collectfunctiondefinitions!(arg, definitions, currentline)
+        end
+        return currentline
+    end
+
+    if node isa QuoteNode && node.value isa Expr
+        return collectfunctiondefinitions!(node.value, definitions, currentline)
+    end
+
+    return currentline
+end
+
+function normalizeignoreset(
+    ignore::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
+)
+    names = Set{String}()
+    isnothing(ignore) && return names
+    foreach(ignore) do name
+        text = String(name)
+        push!(names, text)
+        push!(names, replace(text, "!" => ""))
+    end
+    return names
+end
+
+function functionisignored(
+    fullname::AbstractString,
+    short::AbstractString,
+    ignoreset::AbstractSet{<:AbstractString},
+)
+    isempty(ignoreset) && return false
+
+    candidates = Set{String}()
+    push!(candidates, String(fullname))
+    push!(candidates, replace(String(fullname), "!" => ""))
+    push!(candidates, String(short))
+    push!(candidates, replace(String(short), "!" => ""))
+
+    if occursin('.', String(fullname))
+        tail = last(split(String(fullname), '.'))
+        push!(candidates, tail)
+        push!(candidates, replace(tail, "!" => ""))
+    end
+
+    return any(candidate -> candidate in ignoreset, candidates)
 end

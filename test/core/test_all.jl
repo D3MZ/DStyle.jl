@@ -82,3 +82,39 @@ end
         @test only(violations).rule == :function_name_lowercase
     end
 end
+
+@testset "test_all ignore list for external constructors" begin
+    mktempdir() do dir
+        bad_file = joinpath(dir, "external_ctor.jl")
+        write(
+            bad_file,
+            """
+            function DataFrames.DataFrame(xs)
+                push!(xs, 1)
+                return xs
+            end
+            """,
+        )
+
+        violations = DStyle.test_all(
+            paths = [bad_file],
+            julia_index_from_length = false,
+            module_type_camel_case = false,
+            field_name_type_repetition = false,
+            simple_verb_redefinition = false,
+            throw = false,
+        )
+        @test length(violations) == 2
+
+        ignored = DStyle.test_all(
+            paths = [bad_file],
+            julia_index_from_length = false,
+            module_type_camel_case = false,
+            field_name_type_repetition = false,
+            simple_verb_redefinition = false,
+            ignore = ["DataFrame", "DataFrames.DataFrame"],
+            throw = false,
+        )
+        @test isempty(ignored)
+    end
+end

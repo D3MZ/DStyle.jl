@@ -118,22 +118,26 @@ function test_function_name_lowercase(
     paths::AbstractVector{<:AbstractString};
     broken::Bool = false,
     show_details::Bool = !broken,
+    ignore::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
 )
+    sources = readsources(paths)
     typenames = Set{String}()
-    foreach(paths) do path
-        source = read(path, String)
+    foreach(sources) do entry
+        source = entry.source
         union!(typenames, collectdeclaredtypenames(source))
     end
 
     violations = RuleViolation[]
-    foreach(paths) do path
-        source = read(path, String)
+    foreach(sources) do entry
+        path = entry.path
+        source = entry.source
         append!(
             violations,
             check_function_name_lowercase(
                 source;
                 file = path,
                 constructor_names = typenames,
+                ignore = ignore,
             ),
         )
     end
@@ -163,22 +167,26 @@ function test_mutating_function_bang(
     paths::AbstractVector{<:AbstractString};
     broken::Bool = false,
     show_details::Bool = !broken,
+    ignore::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
 )
+    sources = readsources(paths)
     typenames = Set{String}()
-    foreach(paths) do path
-        source = read(path, String)
+    foreach(sources) do entry
+        source = entry.source
         union!(typenames, collectdeclaredtypenames(source))
     end
 
     violations = RuleViolation[]
-    foreach(paths) do path
-        source = read(path, String)
+    foreach(sources) do entry
+        path = entry.path
+        source = entry.source
         append!(
             violations,
             check_mutating_function_bang(
                 source;
                 file = path,
                 constructor_names = typenames,
+                ignore = ignore,
             ),
         )
     end
@@ -282,21 +290,24 @@ function test_all(;
     mutating_function_bang::Bool = true,
     field_name_type_repetition::Bool = true,
     simple_verb_redefinition::Bool = true,
+    ignore::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
     warn::Bool = false,
     throw::Bool = true,
 )
     checkpaths = isnothing(paths) ? defaultsourcepaths() : collect(paths)
+    sources = readsources(checkpaths)
     typenames = Set{String}()
     if function_name_lowercase || mutating_function_bang
-        foreach(checkpaths) do path
-            source = read(path, String)
+        foreach(sources) do entry
+            source = entry.source
             union!(typenames, collectdeclaredtypenames(source))
         end
     end
     violations = RuleViolation[]
 
-    foreach(checkpaths) do path
-        source = read(path, String)
+    foreach(sources) do entry
+        path = entry.path
+        source = entry.source
         append!(
             violations,
             check_kernel_function_barriers(
@@ -319,6 +330,7 @@ function test_all(;
                     source;
                     file = path,
                     constructor_names = typenames,
+                    ignore = ignore,
                 ),
             )
         end
@@ -329,6 +341,7 @@ function test_all(;
                     source;
                     file = path,
                     constructor_names = typenames,
+                    ignore = ignore,
                 ),
             )
         end
@@ -369,6 +382,7 @@ function test_all(
     field_name_type_repetition = true,
     simple_verb_redefinition = true,
     paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
+    ignore::Union{Nothing, AbstractVector{<:AbstractString}, AbstractSet{<:AbstractString}} = nothing,
 )
     if kernel_function_barriers !== false
         @testset "Kernel function barriers" begin
@@ -402,6 +416,7 @@ function test_all(
             test_function_name_lowercase(
                 testtarget;
                 paths = paths,
+                ignore = ignore,
                 ascheckkwargs(function_name_lowercase)...,
             )
         end
@@ -411,6 +426,7 @@ function test_all(
             test_mutating_function_bang(
                 testtarget;
                 paths = paths,
+                ignore = ignore,
                 ascheckkwargs(mutating_function_bang)...,
             )
         end
@@ -466,6 +482,14 @@ function readme_badge(;
         return image
     end
     return "[$image]($(String(link)))"
+end
+
+function readsources(paths::AbstractVector{<:AbstractString})
+    entries = NamedTuple{(:path, :source), Tuple{String, String}}[]
+    foreach(paths) do path
+        push!(entries, (path = String(path), source = read(path, String)))
+    end
+    return entries
 end
 
 function ascheckkwargs(kwargs::NamedTuple)

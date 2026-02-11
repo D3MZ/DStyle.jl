@@ -31,7 +31,7 @@ function formatviolationreport(violations::AbstractVector{RuleViolation})
     isempty(violations) && return "DStyle found 0 violations."
 
     grouped = Dict{String, Vector{RuleViolation}}()
-    for violation in violations
+    foreach(violations) do violation
         bucket = get!(grouped, violation.file, RuleViolation[])
         push!(bucket, violation)
     end
@@ -42,10 +42,10 @@ function formatviolationreport(violations::AbstractVector{RuleViolation})
         "DStyle found $(length(violations)) $rulename violation(s) across $(length(files)) file(s):"
     lines = String[header]
 
-    for file in files
+    foreach(files) do file
         push!(lines, displaypath(file))
         sort!(grouped[file], by = v -> (v.loop_line, v.function_name))
-        for violation in grouped[file]
+        foreach(grouped[file]) do violation
             push!(
                 lines,
                 "  L$(violation.loop_line) $(violation.function_name): $(violation.message)",
@@ -58,7 +58,7 @@ function formatviolationreport(violations::AbstractVector{RuleViolation})
         push!(lines, "Hint: $(only(hints))")
     else
         push!(lines, "Hints:")
-        for hint in hints
+        foreach(hints) do hint
             push!(lines, "  - $hint")
         end
     end

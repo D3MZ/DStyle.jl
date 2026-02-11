@@ -144,3 +144,21 @@ end
     @test length(violations) == 1
     @test only(violations).function_name == "RunFast"
 end
+
+@testset "ignore list exempts external constructors" begin
+    source = """
+    DataFrames.DataFrame(x) = x
+    RunFast(x) = x
+    """
+
+    violations = DStyle.check_function_name_lowercase(source; file = "external.jl")
+    @test length(violations) == 2
+
+    ignored = DStyle.check_function_name_lowercase(
+        source;
+        file = "external.jl",
+        ignore = ["DataFrame", "DataFrames.DataFrame"],
+    )
+    @test length(ignored) == 1
+    @test only(ignored).function_name == "RunFast"
+end

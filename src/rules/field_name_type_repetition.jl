@@ -7,6 +7,42 @@ function check_field_name_type_repetition(
     source::AbstractString;
     file::AbstractString = "<memory>",
 )
+    violations = RuleViolation[]
+    tree = parsesourcetree(source)
+    if isnothing(tree)
+        return checkfieldrepetitionfallback(source; file = file)
+    end
+    collectfieldrepetitionviolations!(tree, violations, String(file), 1)
+
+    definitions = collectfunctiondefinitions(source)
+    foreach(definitions) do definition
+        occursin('.', definition.name) && return
+        args = definition.args
+        repeated = filter(arg -> argrepeatsargtype(arg), args)
+        isempty(repeated) && return
+
+        suggestion = concisefunctionsignature(definition.shortname, args, repeated)
+        push!(
+            violations,
+            RuleViolation(
+                :field_name_type_repetition,
+                String(file),
+                definition.name,
+                definition.line,
+                definition.line,
+                "typed argument names repeat their type names",
+                "use concise names that rely on dispatch, for example `$suggestion`",
+            ),
+        )
+    end
+
+    return violations
+end
+
+function checkfieldrepetitionfallback(
+    source::AbstractString;
+    file::AbstractString = "<memory>",
+)
     lines = split(source, '\n')
     violations = RuleViolation[]
 
@@ -28,7 +64,7 @@ function check_field_name_type_repetition(
                 structname[] = name
                 structstem[] = lowercase(name)
                 structline[] = linenumber
-                structdepth[] = blockdelta(codeline)
+                structdepth[] = 1
                 return
             end
         else
@@ -52,8 +88,7 @@ function check_field_name_type_repetition(
                 end
             end
 
-            structdepth[] += blockdelta(codeline)
-            if structdepth[] <= 0
+            if occursin(r"^\s*end\b", codeline)
                 instruct[] = false
                 structname[] = ""
                 structstem[] = ""
@@ -64,6 +99,7 @@ function check_field_name_type_repetition(
 
         declaration = parsefunctiondeclaration(codeline)
         isnothing(declaration) && return
+        occursin('.', declaration.name) && return
 
         args = parsefunctionarguments(declaration.args)
         repeated = filter(arg -> argrepeatsargtype(arg), args)
@@ -85,6 +121,100 @@ function check_field_name_type_repetition(
     end
 
     return violations
+end
+
+function collectfieldrepetitionviolations!(node, violations, file::String, line::Int)
+    currentline = line
+
+    if node isa LineNumberNode
+        return sourceline(node)
+    end
+
+    if node isa Expr
+        if node.head == :struct && length(node.args) >= 3
+            structname = extracttypename(node.args[2])
+            if !isnothing(structname)
+                structline = currentline
+                structstem = lowercase(String(something(structname)))
+                collectstructfieldviolations!(
+                    node.args[3],
+                    violations,
+                    file,
+                    structline,
+                    String(something(structname)),
+                    structstem,
+                    structline,
+                )
+            end
+        end
+
+        foreach(node.args) do arg
+            currentline = collectfieldrepetitionviolations!(arg, violations, file, currentline)
+        end
+        return currentline
+    end
+
+    if node isa QuoteNode && node.value isa Expr
+        return collectfieldrepetitionviolations!(node.value, violations, file, currentline)
+    end
+
+    return currentline
+end
+
+function collectstructfieldviolations!(
+    body,
+    violations,
+    file::String,
+    structline::Int,
+    structname::String,
+    structstem::String,
+    line::Int,
+)
+    currentline = line
+
+    if !(body isa Expr) || body.head != :block
+        return currentline
+    end
+
+    foreach(body.args) do field
+        if field isa LineNumberNode
+            currentline = sourceline(field)
+            return
+        end
+
+        fieldname = structfieldname(field)
+        if isnothing(fieldname)
+            return
+        end
+
+        if fieldrepeatsstruct(String(something(fieldname)), structstem)
+            suggestion = simplifyfieldname(String(something(fieldname)), structstem)
+            push!(
+                violations,
+                RuleViolation(
+                    :field_name_type_repetition,
+                    file,
+                    structname,
+                    structline,
+                    currentline,
+                    "field `$(String(something(fieldname)))` repeats type name `$structname`",
+                    "rename field to avoid repeating type stem, for example `$suggestion`",
+                ),
+            )
+        end
+    end
+
+    return currentline
+end
+
+function structfieldname(node)
+    if node isa Symbol
+        return String(node)
+    end
+    if node isa Expr && node.head == :(::) && !isempty(node.args)
+        return node.args[1] isa Symbol ? String(node.args[1]) : nothing
+    end
+    return nothing
 end
 
 function fieldrepeatsstruct(fieldname::AbstractString, structstem::AbstractString)

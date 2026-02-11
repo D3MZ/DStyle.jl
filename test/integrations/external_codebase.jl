@@ -61,3 +61,40 @@
         @test ignored_file in fullscan
     end
 end
+
+@testset "external codebase ignore list" begin
+    mktempdir() do dir
+        mkpath(joinpath(dir, "src"))
+        file = joinpath(dir, "src", "external_constructor.jl")
+        write(
+            file,
+            """
+            function DataFrames.DataFrame(xs)
+                push!(xs, 1)
+                return xs
+            end
+            """,
+        )
+
+        flagged = test_codebase(
+            dir;
+            throw = false,
+            julia_index_from_length = false,
+            module_type_camel_case = false,
+            field_name_type_repetition = false,
+            simple_verb_redefinition = false,
+        )
+        @test length(flagged) == 2
+
+        ignored = test_codebase(
+            dir;
+            throw = false,
+            julia_index_from_length = false,
+            module_type_camel_case = false,
+            field_name_type_repetition = false,
+            simple_verb_redefinition = false,
+            ignore = ["DataFrame", "DataFrames.DataFrame"],
+        )
+        @test isempty(ignored)
+    end
+end

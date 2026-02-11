@@ -149,3 +149,28 @@ end
     @test length(violations) == 1
     @test only(violations).function_name == "bump"
 end
+
+@testset "ignore list exempts external mutating constructors" begin
+    source = """
+    function DataFrames.DataFrame(xs)
+        push!(xs, 1)
+        return xs
+    end
+
+    function bump(xs)
+        xs[1] = 1
+        return xs
+    end
+    """
+
+    violations = DStyle.check_mutating_function_bang(source; file = "external.jl")
+    @test length(violations) == 2
+
+    ignored = DStyle.check_mutating_function_bang(
+        source;
+        file = "external.jl",
+        ignore = ["DataFrame", "DataFrames.DataFrame"],
+    )
+    @test length(ignored) == 1
+    @test only(ignored).function_name == "bump"
+end
