@@ -1,18 +1,6 @@
 function defaultsourcepaths()
     sourcedir = joinpath(pwd(), "src")
-    if !isdir(sourcedir)
-        return String[]
-    end
-
-    files = String[]
-    foreach(walkdir(sourcedir)) do (root, _, names)
-        foreach(names) do name
-            if endswith(name, ".jl")
-                push!(files, joinpath(root, name))
-            end
-        end
-    end
-    return sort!(files)
+    return collectjuliafiles(sourcedir)
 end
 
 function modulesourcepaths(pkg::Module)
@@ -26,8 +14,27 @@ function modulesourcepaths(pkg::Module)
         throw(ArgumentError("Resolved src directory does not exist: $srcdir"))
     end
 
+    return collectjuliafiles(srcdir)
+end
+
+function codebasepaths(
+    root::AbstractString;
+    subdir::Union{Nothing, AbstractString} = "src",
+)
+    basedir = isnothing(subdir) ? abspath(String(root)) : joinpath(abspath(String(root)), String(subdir))
+    if !isdir(basedir)
+        throw(ArgumentError("Directory does not exist: $basedir"))
+    end
+    return collectjuliafiles(basedir)
+end
+
+function collectjuliafiles(dir::AbstractString)
+    if !isdir(dir)
+        return String[]
+    end
+
     files = String[]
-    foreach(walkdir(srcdir)) do (root, _, names)
+    foreach(walkdir(dir)) do (root, _, names)
         foreach(names) do name
             if endswith(name, ".jl")
                 push!(files, joinpath(root, name))

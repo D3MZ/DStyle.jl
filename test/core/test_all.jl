@@ -53,6 +53,32 @@ end
             function_name_lowercase = false,
             mutating_function_bang = false,
             field_name_type_repetition = false,
+            simple_verb_redefinition = false,
         ),
     )
+end
+
+@testset "test_all warn mode" begin
+    mktempdir() do dir
+        bad_file = joinpath(dir, "bad.jl")
+        write(
+            bad_file,
+            """
+            RunFast(x) = x
+            """,
+        )
+
+        violations = @test_logs (:warn, r"DStyle found 1 style violation\(s\)") (:warn, r"function_name_lowercase") DStyle.test_all(
+            paths = [bad_file],
+            julia_index_from_length = false,
+            module_type_camel_case = false,
+            mutating_function_bang = false,
+            field_name_type_repetition = false,
+            simple_verb_redefinition = false,
+            warn = true,
+            throw = false,
+        )
+        @test length(violations) == 1
+        @test only(violations).rule == :function_name_lowercase
+    end
 end

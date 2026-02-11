@@ -11,6 +11,8 @@ function ruledisplayname(rule::Symbol)
         return "mutating function bang"
     elseif rule == :field_name_type_repetition
         return "type-name repetition"
+    elseif rule == :simple_verb_redefinition
+        return "simple verb redefinition"
     else
         return String(rule)
     end

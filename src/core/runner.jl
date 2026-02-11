@@ -236,6 +236,38 @@ function test_field_name_type_repetition(
     return test_field_name_type_repetition(checkpaths; kwargs...)
 end
 
+function test_simple_verb_redefinition(
+    paths::AbstractVector{<:AbstractString};
+    broken::Bool = false,
+    show_details::Bool = !broken,
+)
+    violations = RuleViolation[]
+    foreach(paths) do path
+        source = read(path, String)
+        append!(violations, check_simple_verb_redefinition(source; file = path))
+    end
+
+    if !isempty(violations) && show_details
+        println(stderr, formatviolationreport(violations))
+    end
+
+    if broken
+        @test_broken isempty(violations)
+    else
+        @test isempty(violations)
+    end
+    return violations
+end
+
+function test_simple_verb_redefinition(
+    testtarget::Module;
+    paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
+    kwargs...,
+)
+    checkpaths = isnothing(paths) ? modulesourcepaths(testtarget) : collect(paths)
+    return test_simple_verb_redefinition(checkpaths; kwargs...)
+end
+
 """
     test_all(; paths=nothing, max_lines_from_signature=1, throw=true)
 
@@ -249,6 +281,8 @@ function test_all(;
     function_name_lowercase::Bool = true,
     mutating_function_bang::Bool = true,
     field_name_type_repetition::Bool = true,
+    simple_verb_redefinition::Bool = true,
+    warn::Bool = false,
     throw::Bool = true,
 )
     checkpaths = isnothing(paths) ? defaultsourcepaths() : collect(paths)
@@ -301,6 +335,13 @@ function test_all(;
         if field_name_type_repetition
             append!(violations, check_field_name_type_repetition(source; file = path))
         end
+        if simple_verb_redefinition
+            append!(violations, check_simple_verb_redefinition(source; file = path))
+        end
+    end
+
+    if warn && !isempty(violations)
+        warnviolations(violations)
     end
 
     if throw && !isempty(violations)
@@ -326,6 +367,7 @@ function test_all(
     function_name_lowercase = true,
     mutating_function_bang = true,
     field_name_type_repetition = true,
+    simple_verb_redefinition = true,
     paths::Union{Nothing, AbstractVector{<:AbstractString}} = nothing,
 )
     if kernel_function_barriers !== false
@@ -382,6 +424,15 @@ function test_all(
             )
         end
     end
+    if simple_verb_redefinition !== false
+        @testset "Simple verb redefinition" begin
+            test_simple_verb_redefinition(
+                testtarget;
+                paths = paths,
+                ascheckkwargs(simple_verb_redefinition)...,
+            )
+        end
+    end
     return nothing
 end
 
@@ -426,4 +477,26 @@ function ascheckkwargs(flag::Bool)
         throw(ArgumentError("expected `true` when enabling check kwargs"))
     end
     return NamedTuple()
+end
+
+function test_codebase(
+    root::AbstractString;
+    subdir::Union{Nothing, AbstractString} = "src",
+    warn::Bool = false,
+    throw::Bool = true,
+    kwargs...,
+)
+    paths = codebasepaths(root; subdir = subdir)
+    if isempty(paths)
+        throw(ArgumentError("No Julia source files found under `$(abspath(String(root)))`"))
+    end
+    return test_all(; paths = paths, warn = warn, throw = throw, kwargs...)
+end
+
+function warnviolations(violations::AbstractVector{RuleViolation})
+    @warn "DStyle found $(length(violations)) style violation(s)"
+    foreach(violations) do violation
+        @warn string(violation)
+    end
+    return nothing
 end

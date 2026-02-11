@@ -52,6 +52,15 @@ DStyle.test_all(
 )
 ```
 
+## Target an external repository path
+
+```julia
+violations = test_codebase(
+    "/path/to/another-project";
+    throw = false,
+)
+```
+
 ## Add DStyle as test-only dependency
 
 If you want DStyle tracked in your package `Project.toml` under `[extras]` and
@@ -76,6 +85,16 @@ violations = DStyle.test_all(
 for v in violations
     println(v)
 end
+```
+
+## Emit warnings without failing
+
+```julia
+violations = DStyle.test_all(
+    paths = ["src/MyFile.jl"];
+    warn = true,
+    throw = false,
+)
 ```
 
 ## Rule-level checks

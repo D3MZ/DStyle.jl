@@ -185,6 +185,22 @@ getstate(agent::Agent, broker::Broker, environment::Environment) = (agent, broke
 
 Typical suggestion for the function above: `get(a::Agent, b::Broker, e::Environment)`.
 
+## Simple Verb Redefinition
+
+Goal: avoid introducing new verbs that are only aliases of existing ones.
+
+Fail:
+
+```julia
+record!(history::History, s::State) = push!(history, s)
+```
+
+Pass:
+
+```julia
+record!(history::History, s::State) = push!(history, State(s))
+```
+
 ## Planned Checks
 
 These are listed in README as TODO and not currently enforced:

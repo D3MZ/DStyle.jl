@@ -8,7 +8,9 @@ CurrentModule = DStyle
 
 ```@docs
 test_all
+test_codebase
 readme_badge
+codebasepaths
 ```
 
 ## Rule Checks
@@ -20,6 +22,7 @@ check_module_type_camel_case
 check_function_name_lowercase
 check_mutating_function_bang
 check_field_name_type_repetition
+check_simple_verb_redefinition
 ```
 
 ## Rule Test Helpers
@@ -27,6 +30,7 @@ check_field_name_type_repetition
 ```@docs
 test_kernel_function_barriers
 test_index_from_length
+test_simple_verb_redefinition
 ```
 
 ## GitHub Integration
